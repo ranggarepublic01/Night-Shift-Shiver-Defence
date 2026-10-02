@@ -1,4 +1,5 @@
 {
+  "saas": { "publicToken": "cmuqyvdmt0025m40hd1law2gs" },
   "leaderboards": [
     { "id": "total_stars", "isMain": true },
     { "id": "endless_waves" }
