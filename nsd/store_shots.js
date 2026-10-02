@@ -14,7 +14,7 @@ const scene = async (p, map, wave, steps) => p.evaluate(([map, wave, steps]) => 
     await scene(p, map, wave, steps); if (zoom) await p.evaluate(z => __game.zoom(z), zoom); await p.waitForTimeout(4000);
     await p.addStyleTag({ content: '#toast{display:none!important}' + (title ? '#hud,#call,#fx,.pop{display:none!important}' : '') });
     if (title) await p.evaluate(() => { const d = document.createElement('div'); d.className = 'ttl'; d.style.cssText = 'position:fixed;left:0;right:0;top:4%;pointer-events:none';
-      d.innerHTML = '<h1 class="haunt" style="animation:none;font-size:' + Math.round(Math.min(innerWidth, innerHeight * 1.6) * 0.11) + 'px">Night Shift<span>Shiver Defense</span></h1>'; document.body.appendChild(d); });
+      d.innerHTML = '<h1 class="haunt" style="animation:none;font-size:' + Math.round(Math.min(innerWidth, innerHeight * 1.6) * 0.11) + 'px">Night Defenders<span>Monster Tower Defense</span></h1>'; document.body.appendChild(d); });
     await p.waitForTimeout(800); await p.screenshot({ path: 'store/' + file }); await p.close();
   };
   await shoot(1280, 720, 'garden', 11, 30 * 22, 'cover_1280x720.png', true);

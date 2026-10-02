@@ -1,9 +1,9 @@
-# Night Shift: Shiver Defense — store page
+# Night Defenders: Monster Tower Defense — store page
 
-**Title:** Night Shift: Shiver Defense
+**Title:** Night Defenders: Monster Tower Defense
 
 **Short description (one line):**
-A cozy-spooky tower defense: the monster clinic's night shift keeps the Dawn away from the curtains for one more hour.
+A cozy-spooky monster tower defense: the monster clinic's night shift keeps the Dawn away from the curtains for one more hour.
 
 **Description:**
 It's the last hour before sunrise, and the monster clinic wants one more hour of night. The Dawn is sending its little
@@ -38,7 +38,7 @@ reaches the window blows out a candle. Lose all 20 and the clinic wakes up.
 - `cover_1024x1024.png`: square cover with the title
 - `shot1_garden.png`, `shot2_patch.png`, `shot3_roof.png`: 1280×720 gameplay screenshots
 
-**Upload:** `dist/night-shift-defense.zip` (`python3 build.py`), a single `index.html` with everything inlined.
+**Upload:** `dist/night-defenders.zip` (`python3 build.py`), a single `index.html` with everything inlined.
 It loads the Playgama Bridge v2 from `https://bridge.playgama.com/v2/stable/playgama-bridge.js`.
 
 **Leaderboards to create after the upload (ids used in the code):**

@@ -8,6 +8,6 @@ print('out.html', len(s), 'bytes')
 # the Playgama upload: a zip with index.html at its root
 import zipfile
 os.makedirs(os.path.join(here, 'dist'), exist_ok=True)
-with zipfile.ZipFile(os.path.join(here, 'dist', 'night-shift-defense.zip'), 'w', zipfile.ZIP_DEFLATED) as z:
+with zipfile.ZipFile(os.path.join(here, 'dist', 'night-defenders.zip'), 'w', zipfile.ZIP_DEFLATED) as z:
     z.writestr('index.html', s)
-print('dist/night-shift-defense.zip')
+print('dist/night-defenders.zip')

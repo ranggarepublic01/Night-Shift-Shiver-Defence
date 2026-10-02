@@ -1,5 +1,5 @@
 // ============================================================================
-// Night Shift: Shiver Defense — simulation. No DOM, no three.js, no Math.random:
+// Night Defenders: Monster Tower Defense — simulation. No DOM, no three.js, no Math.random:
 // a seeded level that a bot can play hundreds of times in a second. The drawing
 // reads sim.state and drains sim.events; it never changes the rules.
 // ============================================================================

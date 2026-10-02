@@ -1,4 +1,4 @@
-# Night Shift: Shiver Defense — sources
+# Night Defenders: Monster Tower Defense — sources
 
 - `sim.js`: the rules (maps, waves, towers, enemies, Endless). No DOM, seeded RNG only.
 - `view.js`: three.js drawing, input, map select, saves. Reads `sim.state`, drains `sim.events`.

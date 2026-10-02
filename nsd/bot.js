@@ -1,4 +1,4 @@
-// Balance bots for Night Shift: Shiver Defense. node bot.js [garden|patch|roof|endless] [runs]
+// Balance bots for Night Defenders: Monster Tower Defense. node bot.js [garden|patch|roof|endless] [runs]
 const S = require('./sim.js');
 const arg = process.argv[2] || 'garden', N = +(process.argv[3] || 40);
 const endless = arg === 'endless';

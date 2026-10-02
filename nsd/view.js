@@ -1,5 +1,5 @@
 // ============================================================================
-// Night Shift: Shiver Defense — drawing and input. Reads sim.state, drains sim
+// Night Defenders: Monster Tower Defense — drawing and input. Reads sim.state, drains sim
 // events, calls sim.build / upgrade / sell / startWave. Nothing here changes a rule.
 // ============================================================================
 (() => {

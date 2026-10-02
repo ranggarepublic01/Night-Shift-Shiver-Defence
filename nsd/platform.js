@@ -1,5 +1,5 @@
 // ============================================================================
-// Night Shift: Shiver Defense — the platform (Playgama Bridge v2, copied from Shiver Night's working layer)
+// Night Defenders: Monster Tower Defense — the platform (Playgama Bridge v2, copied from Shiver Night's working layer)
 // and the sound (all made in code). Loaded before view.js.
 // ============================================================================
 // ---------------------------------------------------------------- the platform: Playgama Bridge v2, with a plain-page fallback
