@@ -34,8 +34,8 @@ reaches the window blows out a candle. Lose all 20 and the clinic wakes up.
 **Languages:** English
 
 **Images (in this folder):**
-- `cover_1280x720.png`: landscape cover with the title
-- `cover_1024x1024.png`: square cover with the title
+- `art_cover_square.png/.jpg` (1254×1254) and `art_cover_wide.png/.jpg` (1671×941): the illustrated covers with the logo (main covers)
+- `cover_1280x720.png`, `cover_1024x1024.png`: in-game render covers with the title (spares)
 - `shot1_garden.png`, `shot2_patch.png`, `shot3_roof.png`: 1280×720 gameplay screenshots
 
 **Upload:** `dist/night-defenders.zip` (`python3 build.py`), a single `index.html` with everything inlined.
