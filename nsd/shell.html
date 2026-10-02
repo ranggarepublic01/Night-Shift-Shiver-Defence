@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Night Shift: Shiver Defense</title>
+<script src="https://bridge.playgama.com/v2/stable/playgama-bridge.js"></script>
 {{FONTS}}
 <style>
 /* Night Shift: Shiver Defense — step 1 build. Colours carried from Shiver Night. */
@@ -101,6 +102,26 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; }
 .card p.new { color: var(--mint); font-weight: 600; }
 .card .big + .big { margin-left: 6px; }
 @media (max-height: 420px) { .card p.intro { display: none; } .tile { min-height: 0; padding: 6px 4px 7px; } .tile .ic { font-size: 28px; } .maps { margin: 6px 0 2px; } .card .big { margin-top: 6px; padding: 7px 22px; font-size: 17px; } .card .big.alt { padding: 6px 16px; font-size: 15px; } .card .stars { font-size: 32px; margin: 0; } }
+/* title: the haunted sign over the dark garden */
+.cover.title { background: radial-gradient(ellipse at 50% 40%, rgba(26,20,48,.2), rgba(16,12,30,.85)); }
+.ttl { text-align: center; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.ttl p { margin: 0; color: var(--dim); font-size: 17px; max-width: 30em; text-shadow: 0 2px 6px #1a1430; }
+.haunt { font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: clamp(44px, 9vw, 84px); line-height: .95; margin: 0; color: #ffe3a6; letter-spacing: 1px;
+  text-shadow: 0 0 18px rgba(255,180,90,.55), 0 4px 0 #2a2148, 0 8px 24px rgba(0,0,0,.6); animation: flick 5s infinite; }
+.haunt span { display: block; font-size: .46em; color: var(--mint); text-shadow: 0 0 14px rgba(159,231,208,.5), 0 3px 0 #2a2148; letter-spacing: 3px; }
+@keyframes flick { 0%, 100% { opacity: 1; } 91% { opacity: 1; } 92% { opacity: .55; } 93% { opacity: 1; } 95% { opacity: .7; } 96% { opacity: 1; } }
+.ttl .row { display: flex; gap: 12px; } .ttl .round { width: 48px; height: 48px; font-size: 20px; }
+.ttl .big { font-size: 24px; padding: 12px 54px; animation: bob 1.4s ease-in-out infinite; }
+button.mini { background: #3a2f62; border: 2px solid var(--edge); border-radius: 99px; padding: 2px 12px; font-size: 14px; margin-left: 10px; color: var(--ink); vertical-align: 2px; }
+.tabs { display: flex; gap: 6px; justify-content: center; margin: 6px 0; }
+.tab { background: #3a2f62; border: 2px solid var(--edge); border-radius: 99px; padding: 4px 16px; font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 16px; }
+.tab.on { border-color: var(--candy); color: var(--candy); }
+#lbList { list-style: none; padding: 0; margin: 6px auto; min-width: min(320px, 70vw); max-height: 40vh; overflow-y: auto; text-align: left; }
+#lbList li { display: flex; gap: 10px; padding: 3px 8px; border-radius: 8px; } #lbList li:nth-child(odd) { background: rgba(255,255,255,.05); }
+#lbList li span:nth-child(2) { flex: 1; } #lbList b { color: var(--candy); min-width: 2.2em; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .haunt, .ttl .big, .tile.fresh, #call .btn { animation: none; } }
+@media (max-height: 420px) { .ttl p { font-size: 14px; } .ttl .big { padding: 9px 44px; font-size: 21px; } }
+body.menu #hud, body.menu #call { visibility: hidden; }
 #turn { position: fixed; inset: 0; background: var(--night); display: none; place-items: center; text-align: center; z-index: 10; padding: 20px; }
 #turn div { font-size: 54px; animation: tilt 1.6s ease-in-out infinite; }
 #turn p { font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 20px; }
@@ -117,17 +138,31 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; }
   <div class="pill lives" id="livesPill">🕯️ <b id="lives">20</b></div>
   <div class="pill">🌅 <span id="wave">0/12</span></div>
   <div class="sp"></div>
+  <button class="round" id="soundBtn" aria-label="Sound">🔊</button>
   <button class="round" id="speed" aria-label="Game speed">1×</button>
   <button class="round" id="pauseBtn" aria-label="Pause">❚❚</button>
 </div>
 <div id="info" hidden></div>
 <div id="toast"><div class="t" id="toastT"></div><div class="s" id="toastS"></div></div>
 
-<div class="cover" id="mapCard"><div class="card wide">
+<div class="cover title" id="titleCard"><div class="ttl">
+  <h1 class="haunt">Night Shift<span>Shiver Defense</span></h1>
+  <p>One more hour of night, please! Keep the Dawn’s helpers away from the clinic’s curtains.</p>
+  <button class="big" id="titlePlay">Play</button>
+  <div class="row"><button class="round" id="titleSound" aria-label="Sound">🔊</button><button class="round" id="titleLb" aria-label="Leaderboards">🏆</button></div>
+</div></div>
+<div class="cover" id="lbCard" hidden><div class="card">
+  <h1>Leaderboards</h1>
+  <div class="tabs"><button class="tab on" id="lbT1">⭐ Stars</button><button class="tab" id="lbT2">♾️ Endless</button></div>
+  <ol id="lbList"></ol>
+  <p id="lbNote"></p>
+  <button class="big alt" id="lbBack">Back</button>
+</div></div>
+<div class="cover" id="mapCard" hidden><div class="card wide">
   <h1>Night Shift <span>Shiver Defense</span></h1>
   <p class="intro">The Dawn wants to open the clinic’s curtains. One more hour of night, please! Tap a stone beside the path to place a monster; more monsters join on later maps.</p>
   <div class="maps" id="maps"></div>
-  <p class="total">⭐ <b id="starTotal">0</b> / 9</p>
+  <p class="total">⭐ <b id="starTotal">0</b> / 9 <button class="mini" id="mapLb">🏆 Leaderboards</button></p>
 </div></div>
 <div class="cover" id="pauseCard" hidden><div class="card">
   <h1>Paused</h1>
@@ -149,6 +184,9 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; }
 {{THREE}}
 <script>
 {{SIM}}
+</script>
+<script>
+{{PLATFORM}}
 </script>
 <script>
 {{VIEW}}

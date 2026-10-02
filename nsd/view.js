@@ -670,8 +670,8 @@ function refreshRing() {
       const a = -Math.PI / 2 + i * TAU / list.length; const dx = Math.cos(a) * R, dy = Math.sin(a) * R;
       const cost = TW[type].cost[0];
       opt(TOWER_ICON[type], cost, dx, dy, (S.candy < cost ? 'poor' : '') + (selType === type ? ' sel' : ''), () => {
-        if (selType === type) { if (sim.build(selSlot, type)) { closeRing(); } else toast('Not enough candy', 'Shoo more Dawn helpers to earn candy.', 1.6); return; }
-        selType = type; showRange(sx, sz, TW[type].range[0]); refreshRing();
+        if (selType === type) { if (sim.build(selSlot, type)) { closeRing(); } else { Snd.play('nope'); toast('Not enough candy', 'Shoo more Dawn helpers to earn candy.', 1.6); } return; }
+        selType = type; Snd.play('pick'); showRange(sx, sz, TW[type].range[0]); refreshRing();
       });
     });
     ui.info.hidden = false;
@@ -681,7 +681,7 @@ function refreshRing() {
     const D2 = TW[T.type], uc = sim.upgradeCost(selSlot), sv = sim.sellValue(selSlot);
     showRange(sx, sz, D2.range[T.level - 1]);
     const up = opt('⬆️', uc != null ? uc : 'max', 0, -R, uc == null ? 'max' : S.candy < uc ? 'poor' : '', () => {
-      if (uc == null) return; if (!sim.upgrade(selSlot)) toast('Not enough candy', '', 1.4);
+      if (uc == null) return; if (!sim.upgrade(selSlot)) { Snd.play('nope'); toast('Not enough candy', '', 1.4); }
     });
     up.addEventListener('pointerenter', () => { if (uc != null) showRange(sx, sz, D2.range[T.level]); });
     up.addEventListener('pointerleave', () => showRange(sx, sz, D2.range[T.level - 1]));
@@ -706,39 +706,51 @@ renderer.domElement.addEventListener('pointerdown', ev => {
   if (!started || over) return;
   const s = slotAt(ev.clientX, ev.clientY);
   if (s == null || s === selSlot) { closeRing(); return; }
-  openRing(s);
+  Snd.play('tap'); openRing(s);
 });
-ui.call.addEventListener('pointerdown', ev => { ev.stopPropagation(); if (sim.canCallEarly()) { const b = sim.earlyBonus(); sim.startWave(); if (b > 0) { const p = callScreen(); const el = document.createElement('div'); el.className = 'pop'; el.textContent = '+' + b + ' 🍬 early!'; el.style.left = Math.max(48, p.x) + 'px'; el.style.top = Math.max(110, p.y) - 50 + 'px'; fx.appendChild(el); setTimeout(() => el.remove(), 1200); } } });
+ui.call.addEventListener('pointerdown', ev => { ev.stopPropagation(); if (sim.canCallEarly()) { const b = sim.earlyBonus(); sim.startWave(); if (b > 0) { Snd.play('early'); const p = callScreen(); const el = document.createElement('div'); el.className = 'pop'; el.textContent = '+' + b + ' 🍬 early!'; el.style.left = Math.max(48, p.x) + 'px'; el.style.top = Math.max(110, p.y) - 50 + 'px'; fx.appendChild(el); setTimeout(() => el.remove(), 1200); } } });
 let speed = 1;
 ui.speed.addEventListener('click', () => { speed = speed === 1 ? 2 : 1; ui.speed.textContent = speed + '×'; ui.speed.classList.toggle('on', speed === 2); });
-let userPaused = false, tabHidden = false;
-$('pauseBtn').addEventListener('click', () => { if (!started || over) return; userPaused = true; $('pauseCard').hidden = false; });
-$('resumeBtn').addEventListener('click', () => { userPaused = false; $('pauseCard').hidden = true; });
-$('restartBtn').addEventListener('click', () => { $('pauseCard').hidden = true; userPaused = false; restart(); });
-document.addEventListener('visibilitychange', () => { tabHidden = document.hidden; });
+// three reasons to stand still: the tab is hidden, the platform asked (an ad, a tab switch), or the player paused
+let userPaused = false, tabHidden = false, platPaused = false, adBusy = false;
+let sndPaused = null;
+function recomputePaused() { const p = tabHidden || platPaused || adBusy || userPaused; if (p !== sndPaused) { sndPaused = p; Snd.set({ paused: p }); } }
+const lvlInfo = () => ({ world: game.endless ? 'endless' : 'maps', level: game.endless ? 'endless' : game.map });
+function openPause() { if (!started || over || userPaused) return; userPaused = true; $('pauseCard').hidden = false; closeRing(); PF.msg('level_paused', lvlInfo()); }
+function closePause() { userPaused = false; $('pauseCard').hidden = true; PF.msg('level_resumed', lvlInfo()); }
+$('pauseBtn').addEventListener('click', openPause);
+$('resumeBtn').addEventListener('click', closePause);
+$('restartBtn').addEventListener('click', () => { $('pauseCard').hidden = true; userPaused = false; PF.msg('level_failed', lvlInfo()); restart(); });
+document.addEventListener('visibilitychange', () => { tabHidden = document.hidden; if (tabHidden) { PF.flush(); openPause(); } recomputePaused(); });
+window.addEventListener('pagehide', () => PF.flush());
+document.addEventListener('keydown', e => { if (e.key === 'Escape' || e.key === 'p') { if (!$('pauseCard').hidden) closePause(); else openPause(); } });
+// sound: one switch for effects and music, kept in the save
+function syncSound() { const on = save.sound !== false; for (const id of ['soundBtn', 'titleSound']) { $(id).textContent = on ? '🔊' : '🔇'; $(id).classList.toggle('on', !on); } Snd.set({ sfx: on, music: on }); }
+for (const id of ['soundBtn', 'titleSound']) $(id).addEventListener('click', () => { save.sound = save.sound === false; persist(); syncSound(); if (save.sound) Snd.play('tap'); });
 
 // ---------------------------------------------------------------- events from the sim
 const seen = new Set();
 function handle(e) {
   switch (e.type) {
     case 'spawn': { const en = S.enemies.find(q => q.id === e.id); if (en) makeEnemy(en);
+      if (e.kind === 'rooster' || e.kind === 'clock') { if (Math.random() < 0.25) Snd.play(e.kind === 'rooster' ? 'rooster' : 'ring'); }
       if (!seen.has(e.kind)) { seen.add(e.kind); toast(ENEMY_ICON[e.kind] + ' ' + EN[e.kind].name, ENEMY_TIP[e.kind], e.kind === 'sun' ? 4 : 3.2); } break; }
-    case 'shoo': { const V = views.get(e.id); if (V) pop('+' + e.candy + '🍬', V.root.position.x, V.y + 1, V.root.position.z); dropEnemy(e.id, 'shoo'); break; }
+    case 'shoo': { Snd.play(e.kind === 'sun' ? 'win' : 'shoo'); const V = views.get(e.id); if (V) pop('+' + e.candy + '🍬', V.root.position.x, V.y + 1, V.root.position.z); dropEnemy(e.id, 'shoo'); break; }
     case 'leak': {
-      dropEnemy(e.id, 'leak');
+      dropEnemy(e.id, 'leak'); Snd.play('candleOut');
       for (let k = 0, n = 0; k < candles.length && n < e.lives; k++) if (!candles[k].out) { candles[k].out = true; n++; sparkle(clinic.position.x + candles[k].g.position.x, 1.2, candles[k].g.position.z, 'rgba(200,200,220,.5)', 4); }
       ui.livesPill.classList.remove('hurt'); void ui.livesPill.offsetWidth; ui.livesPill.classList.add('hurt');
       pop('−' + e.lives + ' 🕯️', WIN[0] - 0.6, 2.6, WIN[1], 'bad'); break; }
-    case 'wave': { closeRingIfStale(); const boss = e.boss; toast(boss ? (S.endless ? 'Wave ' + e.wave + ': the Sun!' : 'Final wave!') : 'Wave ' + e.wave, boss ? 'Here comes the Sun…' : '', 1.6); break; }
-    case 'throw': case 'bats': case 'lob': case 'breath': case 'zap': { const T = stones[e.tower].tower; if (T) T.a = 1;
+    case 'wave': { closeRingIfStale(); const boss = e.boss; Snd.play(boss ? 'sun' : 'wave'); Snd.tempo(boss ? 118 : game.endless ? 104 : 94); toast(boss ? (S.endless ? 'Wave ' + e.wave + ': the Sun!' : 'Final wave!') : 'Wave ' + e.wave, boss ? 'Here comes the Sun…' : '', 1.6); break; }
+    case 'throw': case 'bats': case 'lob': case 'breath': case 'zap': { const T = stones[e.tower].tower; if (T) T.a = 1; Snd.play(e.type === 'throw' ? 'bone' : e.type);
       if (e.type === 'breath') breath(e.tower, e.r); if (e.type === 'zap') zap(e.tower, e.pts); break; }
-    case 'burst': seeds(e.x, e.z, e.r); break;
+    case 'burst': seeds(e.x, e.z, e.r); Snd.play('burst'); break;
     case 'hit': sparkle(e.x, 1, e.z, e.kind === 'bat' ? 'rgba(255,140,180,.8)' : 'rgba(255,250,230,.8)', 4); break;
-    case 'build': { makeTower(e.slot, e.kind); sparkle(stones[e.slot].g.position.x, 0.8, stones[e.slot].g.position.z, 'rgba(159,231,208,.9)', 14); break; }
-    case 'upgrade': { setLevel(e.slot, e.level); const st = stones[e.slot]; if (st.tower) st.tower.pop = 0.6; sparkle(st.g.position.x, 1.4, st.g.position.z, 'rgba(255,209,102,.95)', 18); break; }
-    case 'sell': removeTower(e.slot); pop('+' + e.candy + '🍬', stones[e.slot].g.position.x, 1.5, stones[e.slot].g.position.z); break;
-    case 'won': setTimeout(() => endCard(true, e.stars), 1400); over = true; closeRing(); break;
-    case 'lost': setTimeout(() => endCard(false, 0), 1000); over = true; closeRing(); break;
+    case 'build': { Snd.play('build'); makeTower(e.slot, e.kind); sparkle(stones[e.slot].g.position.x, 0.8, stones[e.slot].g.position.z, 'rgba(159,231,208,.9)', 14); break; }
+    case 'upgrade': { Snd.play('upgrade'); setLevel(e.slot, e.level); const st = stones[e.slot]; if (st.tower) st.tower.pop = 0.6; sparkle(st.g.position.x, 1.4, st.g.position.z, 'rgba(255,209,102,.95)', 18); break; }
+    case 'sell': Snd.play('sell'); removeTower(e.slot); pop('+' + e.candy + '🍬', stones[e.slot].g.position.x, 1.5, stones[e.slot].g.position.z); break;
+    case 'won': setTimeout(() => endCard(true, e.stars), 1400); over = true; closeRing(); Snd.play('win'); levelOver(true); break;
+    case 'lost': setTimeout(() => endCard(false, 0), 1000); over = true; closeRing(); Snd.play('fail'); levelOver(false); break;
     case 'cleared': if (S.endless && e.wave > (save.endless || 0) && save.endless > 0 && !S.newBest) { S.newBest = true; toast('New best!', 'Past wave ' + save.endless + '. Keep going!', 2); } break;
   }
 }
@@ -814,10 +826,10 @@ function updateWorld(dt, t) {
 }
 
 // ---------------------------------------------------------------- saves (this device for now; Playgama cloud saves come in step 3)
-const SAVE_KEY = 'nsd-save-1';
-let save = { stars: {}, endless: 0 };
-try { const v = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (v && typeof v === 'object') save = { stars: Object.assign({}, v.stars), endless: +v.endless || 0 }; } catch (e) {}
-function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+// ---- through Bridge storage on Playgama (cloud save), device storage on a plain page. One JSON under one key.
+let save = { v: 1, stars: {}, endless: 0, sound: true, plays: 0, lb: { stars: 0, endless: 0 }, lbDirty: {} };
+function mergeSave(o) { if (!o || o.v !== 1) return; save.stars = Object.assign({}, o.stars); save.endless = +o.endless || 0; save.sound = o.sound !== false; save.plays = +o.plays || 0; save.lb = Object.assign({ stars: 0, endless: 0 }, o.lb); save.lbDirty = Object.assign({}, o.lbDirty); }
+function persist() { PF.saveSoon(JSON.stringify(save)); }
 // a map opens when the one before it is won (any stars); Endless opens with the Garden Path won
 function unlocked(id) { const i = D.MAP_ORDER.indexOf(id); return i <= 0 || (save.stars[D.MAP_ORDER[i - 1]] || 0) > 0; }
 const endlessOpen = () => (save.stars[D.ENDLESS.map] || 0) > 0;
@@ -835,19 +847,61 @@ function clearViews() {
   for (let i = 0; i < stones.length; i++) if (stones[i].tower) { scene.remove(stones[i].tower.root); stones[i].tower = null; stones[i].plus.visible = true; stones[i].rim.material = M(RIM[0]); }
   for (const c of candles) { c.out = false; }
 }
-function hideCards() { for (const id of ['mapCard', 'pauseCard', 'endCard']) $(id).hidden = true; }
+function hideCards() { for (const id of ['titleCard', 'lbCard', 'mapCard', 'pauseCard', 'endCard']) $(id).hidden = true; }
 function play(id, endless) {
   clearViews(); closeRing(); hideCards();
   game = { map: endless ? D.ENDLESS.map : id, endless: !!endless };
   buildWorld(game.map);
   sim = D.create({ seed: newSeed(), map: game.map, endless: game.endless }); S = sim.state; window.__game.sim = sim;
   over = false; started = true; userPaused = false; lastHud = '';
+  save.plays++; persist(); PF.msg('level_started', lvlInfo());
+  Snd.music(game.endless ? 'endless' : 'night'); Snd.ambient(true);
   const nt = NEW_TOWER[game.map];
   if (game.endless) toast('♾️ Endless', 'All five monsters are on shift. How many waves can you hold?' + (save.endless ? ' Best: ' + save.endless + '.' : ''), 4);
   else if (nt) toast(MAP_ICON[game.map] + ' ' + D.MAPS[game.map].name, TOWER_ICON[nt] + ' ' + TW[nt].name + ' joins the night shift! ' + TOWER_TEXT[nt].line, 4.5);
   else toast('Tap a stone', 'Place a monster beside the path, then start the wave.', 3.5);
 }
 function restart() { play(game.map, game.endless); }
+function levelOver(won) {
+  PF.msg(won || game.endless ? 'level_completed' : 'level_failed', lvlInfo());
+  Snd.ambient(false); setTimeout(() => { if (over) Snd.music('title'); }, 2500);
+}
+// interstitials only between levels: when the player leaves the end card
+function betweenLevels(go) {
+  if (adBusy) return; adBusy = true; recomputePaused();
+  PF.interstitial('level_completed').then(() => { adBusy = false; recomputePaused(); go(); });
+}
+// two leaderboards: total stars over the three maps, and the best Endless wave. A score that couldn't be sent is sent again at the next start.
+function submitScore(board) {
+  const score = board === 'endless' ? save.endless : totalStars(), id = board === 'endless' ? LB_ENDLESS : LB_STARS;
+  if (score <= (save.lb[board] || 0) && !save.lbDirty[board]) return;
+  save.lbDirty[board] = 1; persist();
+  PF.setScore(id, score).then(ok => { if (ok) { save.lb[board] = Math.max(save.lb[board] || 0, score); delete save.lbDirty[board]; persist(); } });
+}
+function resendScores() { if (save.lbDirty.stars) submitScore('stars'); if (save.lbDirty.endless) submitScore('endless'); }
+let lbTab = 'stars', lbFrom = 'titleCard';
+function openLb(tab, from) {
+  if (from) lbFrom = from; lbTab = tab || lbTab; for (const id of ['titleCard', 'mapCard']) $(id).hidden = true; $('lbCard').hidden = false;
+  $('lbT1').classList.toggle('on', lbTab === 'stars'); $('lbT2').classList.toggle('on', lbTab === 'endless');
+  const mine = lbTab === 'stars' ? totalStars() : save.endless, list = $('lbList'), note = $('lbNote'); list.innerHTML = '';
+  const type = PF.lbType(), id = lbTab === 'stars' ? LB_STARS : LB_ENDLESS, unit = lbTab === 'stars' ? ' ⭐' : ' waves';
+  const yours = lbTab === 'stars' ? 'Your stars: ' + mine + ' of 9.' : 'Your best: ' + mine + ' waves in Endless.';
+  if (type === 'in_game') {
+    note.textContent = 'Loading… ' + yours;
+    PF.entries(id).then(rows => {
+      if ((lbTab === 'stars' ? LB_STARS : LB_ENDLESS) !== id) return;
+      note.textContent = yours;
+      if (!rows || !rows.length) { note.textContent = 'Nobody on this board yet. ' + yours; return; }
+      rows.slice(0, 10).forEach(r => { const li = document.createElement('li'); li.innerHTML = '<b></b><span></span><span></span>'; li.children[0].textContent = '#' + (r.rank || ''); li.children[1].textContent = r.name || 'A monster'; li.children[2].textContent = (r.score || 0) + unit; list.append(li); });
+    });
+  } else if (type === 'native_popup') { note.textContent = yours; PF.nativePopup(id); }
+  else note.textContent = yours + (type === 'native' ? ' The platform shows the board.' : ' The shared board appears when the game runs on Playgama.');
+}
+$('lbT1').addEventListener('click', () => openLb('stars'));
+$('lbT2').addEventListener('click', () => openLb('endless'));
+$('lbBack').addEventListener('click', () => { $('lbCard').hidden = true; if (lbFrom === 'mapCard') showMaps(); else $('titleCard').hidden = false; });
+$('titleLb').addEventListener('click', () => openLb(null, 'titleCard'));
+$('mapLb').addEventListener('click', () => openLb(null, 'mapCard'));
 function showMaps() {
   hideCards(); closeRing(); started = false;
   const el = $('maps'); el.innerHTML = '';
@@ -867,7 +921,7 @@ function endCard(won, stars) {
   const nb = $('nextBtn'), nw = $('endNew'); nb.hidden = true; nw.hidden = true;
   if (S.endless) {
     const n = S.cleared, best = save.endless || 0, isBest = n > best;
-    if (isBest) { save.endless = n; persist(); }
+    if (isBest) { save.endless = n; persist(); submitScore('endless'); }
     $('endT').textContent = 'Good morning…';
     $('endStars').innerHTML = '';
     $('endS').textContent = 'You held the night for ' + n + ' wave' + (n === 1 ? '' : 's') + '. Shooed: ' + S.stats.shooed + '.';
@@ -875,7 +929,8 @@ function endCard(won, stars) {
     $('againBtn').textContent = 'Try again'; $('againBtn').className = 'big';
   } else {
     const id = game.map, wasOpen = D.MAP_ORDER.map(unlocked), hadEndless = endlessOpen();
-    if (won && stars > (save.stars[id] || 0)) { save.stars[id] = stars; persist(); }
+    if (won && stars > (save.stars[id] || 0)) { save.stars[id] = stars; persist(); submitScore('stars'); }
+    if (won) setTimeout(() => Snd.play('star'), 400);
     $('endT').textContent = won ? 'Night saved!' : 'Good morning…';
     $('endStars').innerHTML = [1, 2, 3].map(i => '<i class="' + (i <= stars ? 'on' : '') + '">⭐</i>').join('');
     $('endS').textContent = won ? (stars === 3 ? 'Not one candle out. The clinic sleeps in.' : S.lives + ' candles still burning. One more hour of night!') + ' Shooed: ' + S.stats.shooed + '.'
@@ -885,23 +940,40 @@ function endCard(won, stars) {
     if (next && unlocked(next) && !wasOpen[D.MAP_ORDER.indexOf(next)]) { const nt = NEW_TOWER[next]; news.push('🔓 ' + D.MAPS[next].name + ' is open' + (nt ? ': ' + TOWER_ICON[nt] + ' ' + TW[nt].name + ' is waiting there!' : '!')); }
     if (endlessOpen() && !hadEndless) news.push('♾️ Endless is open too.');
     if (news.length) { nw.hidden = false; nw.innerHTML = news.join('<br>'); }
-    if (won && next && unlocked(next)) { nb.hidden = false; nb.textContent = 'Next: ' + D.MAPS[next].name; nb.onclick = () => play(next, false); }
+    if (won && next && unlocked(next)) { nb.hidden = false; nb.textContent = 'Next: ' + D.MAPS[next].name; nb.onclick = () => betweenLevels(() => play(next, false)); }
     $('againBtn').textContent = won ? 'Play again' : 'Try again';
     $('againBtn').className = 'big' + (nb.hidden ? '' : ' alt');
   }
   $('endCard').hidden = false; toastTimer = 0.01;
 }
-$('againBtn').addEventListener('click', restart);
-$('endMapsBtn').addEventListener('click', showMaps);
-$('pauseMapsBtn').addEventListener('click', () => { userPaused = false; showMaps(); });
-showMaps();
+$('againBtn').addEventListener('click', () => betweenLevels(restart));
+$('endMapsBtn').addEventListener('click', () => betweenLevels(showMaps));
+$('pauseMapsBtn').addEventListener('click', () => { userPaused = false; PF.msg('level_failed', lvlInfo()); Snd.ambient(false); Snd.music('title'); showMaps(); });
+// title: the first Play of a new player goes straight into the Garden Path; after that, to the maps
+$('titlePlay').addEventListener('click', () => { Snd.play('pick'); if (!save.plays && !totalStars()) play('garden', false); else showMaps(); });
+// the first touch anywhere is what browsers need before sound may play
+const unlockAudio = () => { Snd.unlock(); if (!started) Snd.music('title'); };
+window.addEventListener('pointerdown', unlockAudio, { capture: true }); window.addEventListener('keydown', unlockAudio, { capture: true });
+async function boot() {
+  await PF.boot();
+  PF.onPause = p => { platPaused = p; if (p) PF.flush(); recomputePaused(); };
+  PF.onAudio = a => Snd.set({ plat: a });
+  Snd.set({ plat: PF.audioOn });
+  if (!QS.get('fresh')) { const raw = await PF.load(); if (raw) { try { mergeSave(JSON.parse(raw)); } catch (e) { } } }
+  PF.onLate = raw => { if (save.plays) return; try { mergeSave(JSON.parse(raw)); } catch (e) { return; } syncSound(); if (!$('mapCard').hidden) showMaps(); };
+  syncSound();
+  requestAnimationFrame(() => requestAnimationFrame(() => { PF.ready(); resendScores(); window.__nsdReady = true; }));
+}
+boot();
 
 // ---------------------------------------------------------------- loop
 let last = performance.now(), acc = 0, clock = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  const paused = userPaused || tabHidden || !started;
+  const paused = userPaused || tabHidden || platPaused || adBusy || !started;
+  recomputePaused();
+  document.body.classList.toggle('menu', !started);
   if (!paused) {
     clock += dt;
     if (S.phase === 'running') { acc += dt * speed; let n = 0; while (acc >= D.DT && n < 12) { sim.step(D.DT); acc -= D.DT; n++; } }
@@ -920,5 +992,5 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // for automated tests only
-window.__game = { sim, D, toScreen, stones, get S() { return S; }, get save() { return save; }, play, showMaps, start() { play(game.map, game.endless); }, setSpeed(s) { speed = s; } };
+window.__game = { sim, D, toScreen, stones, get S() { return S; }, get save() { return save; }, play, showMaps, start() { play(game.map, game.endless); }, setSpeed(s) { speed = s; }, zoom(z) { camera.zoom = z; camera.updateProjectionMatrix(); } };
 })();

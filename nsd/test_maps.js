@@ -5,10 +5,11 @@ const { chromium } = require('playwright');
   const p = await b.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true });
   const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
   await p.goto('file://' + __dirname + '/out.html?seed=3'); await p.waitForTimeout(1500);
-  await p.screenshot({ path: 'm0_maps_new.png' });
+  await p.screenshot({ path: 'm00_title.png' });
+  await p.evaluate(() => __game.showMaps()); await p.waitForTimeout(300); await p.screenshot({ path: 'm0_maps_new.png' });
   // a save with the garden won: patch and endless open
-  await p.evaluate(() => { localStorage.setItem('nsd-save-1', JSON.stringify({ stars: { garden: 2, patch: 3 }, endless: 17 })); });
-  await p.reload(); await p.waitForTimeout(1500); await p.screenshot({ path: 'm1_maps_some.png' });
+  await p.evaluate(() => { localStorage.setItem('nightShiftDefense.v1', JSON.stringify({ v: 1, stars: { garden: 2, patch: 3 }, endless: 17 })); });
+  await p.reload(); await p.waitForTimeout(1500); await p.evaluate(() => __game.showMaps()); await p.waitForTimeout(300); await p.screenshot({ path: 'm1_maps_some.png' });
   for (const id of ['patch', 'roof']) {
     await p.evaluate(id => __game.play(id, false), id); await p.waitForTimeout(1200);
     await p.screenshot({ path: 'm2_' + id + '_intro.png' });
