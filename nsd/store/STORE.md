@@ -38,7 +38,7 @@ reaches the window blows out a candle. Lose all 20 and the clinic wakes up.
 - `cover_1280x720.png`, `cover_1024x1024.png`: in-game render covers with the title (spares)
 - `shot1_garden.png`, `shot2_patch.png`, `shot3_roof.png`: 1280×720 gameplay screenshots
 
-**Upload:** `dist/night-defenders.zip` (`python3 build.py`), a single `index.html` with everything inlined.
+**Upload:** `dist/night-defenders.zip` (`python3 build.py`): `index.html` with everything inlined, plus `playgama-bridge-config.json` next to it.
 It loads the Playgama Bridge v2 from `https://bridge.playgama.com/v2/stable/playgama-bridge.js`.
 
 **Leaderboards to create after the upload (ids used in the code):**

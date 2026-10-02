@@ -1,0 +1,6 @@
+{
+  "leaderboards": [
+    { "id": "total_stars", "isMain": true },
+    { "id": "endless_waves" }
+  ]
+}

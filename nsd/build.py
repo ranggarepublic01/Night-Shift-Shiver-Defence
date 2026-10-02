@@ -10,4 +10,5 @@ import zipfile
 os.makedirs(os.path.join(here, 'dist'), exist_ok=True)
 with zipfile.ZipFile(os.path.join(here, 'dist', 'night-defenders.zip'), 'w', zipfile.ZIP_DEFLATED) as z:
     z.writestr('index.html', s)
+    z.write(os.path.join(here, 'playgama-bridge-config.json'), 'playgama-bridge-config.json')   # the Bridge loads it from next to index.html
 print('dist/night-defenders.zip')
