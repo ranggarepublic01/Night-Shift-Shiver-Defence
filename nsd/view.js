@@ -9,7 +9,9 @@ const $ = id => document.getElementById(id);
 const stage = $('stage'), fx = $('fx');
 const QS = new URLSearchParams(location.search);
 const D = DefenseSim, TW = D.TOWERS, EN = D.ENEMIES;
-let sim = D.create({ seed: +(QS.get('seed') || 0) || (Date.now() % 100000) + 1 });
+const newSeed = () => (Date.now() % 100000) + 1;
+let game = { map: D.MAPS[QS.get('map')] ? QS.get('map') : 'garden', endless: QS.get('endless') === '1' };
+let sim = D.create({ seed: +(QS.get('seed') || 0) || newSeed(), map: game.map, endless: game.endless });
 let S = sim.state;
 
 // ---------------------------------------------------------------- renderer (Shiver Night's look)
@@ -45,76 +47,23 @@ const moonL = new THREE.DirectionalLight('#b8c4f5', 0.7); moonL.position.set(-8,
 moonL.shadow.mapSize.set(2048, 2048); Object.assign(moonL.shadow.camera, { left: -19, right: 19, top: 12, bottom: -12, far: 60 }); scene.add(moonL);
 const dawnL = new THREE.PointLight('#ffb070', 0, 30, 1.6); dawnL.position.set(15, 4, -1.6); scene.add(dawnL);
 
-// ---------------------------------------------------------------- the garden
-const MAP = sim.map, PATH = sim.path;
-const ground = mesh(new THREE.PlaneGeometry(80, 50), M('#24302c'), 0, 0, 0); ground.rotation.x = -Math.PI / 2; ground.castShadow = false;
-// grass tufts and darker patches, seeded so the garden looks the same every time
+// ---------------------------------------------------------------- the map: rebuilt whenever another map is chosen
+// Everything below is built into `world`, which is thrown away and rebuilt for the next map.
+let MAP, PATH, GATE, WIN, clinic, curtains, candles, airLine, stones, mapId = null;
+const world = new THREE.Group(); scene.add(world);
 let seedG = 7; const rg = () => { seedG = (seedG * 16807) % 2147483647; return seedG / 2147483647; };
-for (let i = 0; i < 26; i++) { const p = mesh(new THREE.CircleGeometry(1 + rg() * 2.2, 9), M(rg() > 0.5 ? '#283830' : '#202a28'), -17 + rg() * 32, 0.01, -8 + rg() * 16); p.rotation.x = -Math.PI / 2; p.castShadow = false; }
-const tuft = new THREE.ConeGeometry(0.06, 0.32, 3);
-{ const spots = []; for (let i = 0; i < 220; i++) { const x = -17 + rg() * 31, z = -8.5 + rg() * 17; if (PATH.dist(x, z) < 1.1) continue; if (MAP.slots.some(s => Math.hypot(s[0] - x, s[1] - z) < 0.9)) continue; spots.push([x, z, (rg() - 0.5) * 0.5]); }
-  for (const col of ['#3d5a44', '#4a6a4a']) { const im = new THREE.InstancedMesh(tuft, M(col), spots.length); const o = new THREE.Object3D(); let n = 0;
-    spots.forEach((s, i) => { if ((i % 2 === 0) !== (col === '#3d5a44')) return; o.position.set(s[0], 0.15, s[1]); o.rotation.set(0, 0, s[2]); o.updateMatrix(); im.setMatrixAt(n++, o.matrix); });
-    im.count = n; scene.add(im); } }
-// the path: packed earth with stepping stones
-const PW = 1.5;
-for (const g of PATH.segs) {
-  const mx = (g.x0 + g.x1) / 2, mz = (g.z0 + g.z1) / 2, a = Math.atan2(g.x1 - g.x0, g.z1 - g.z0);
-  const seg = mesh(new THREE.BoxGeometry(PW, 0.06, g.len), M('#6b5644'), mx, 0.03, mz); seg.rotation.y = a; seg.castShadow = false;
-  const edge = mesh(new THREE.BoxGeometry(PW + 0.25, 0.04, g.len + 0.25), M('#4a3c34'), mx, 0.015, mz); edge.rotation.y = a; edge.castShadow = false;
-  for (let s = 0.6; s < g.len; s += 1.1) { const k = s / g.len; const st = mesh(new THREE.CylinderGeometry(0.22 + rg() * 0.12, 0.26, 0.05, 6), M('#8a7866'), g.x0 + (g.x1 - g.x0) * k + (rg() - 0.5) * 0.7, 0.07, g.z0 + (g.z1 - g.z0) * k + (rg() - 0.5) * 0.7); st.castShadow = false; }
-}
-for (const [x, z] of MAP.path.slice(1, -1)) { const c = mesh(new THREE.CylinderGeometry(PW / 2, PW / 2, 0.06, 12), M('#6b5644'), x, 0.031, z); c.castShadow = false; const c2 = mesh(new THREE.CylinderGeometry(PW / 2 + 0.125, PW / 2 + 0.125, 0.04, 12), M('#4a3c34'), x, 0.016, z); c2.castShadow = false; }
-
-// the garden gate (where the Dawn comes in)
-const GATE = MAP.path[0];
-{ const g = new THREE.Group(); g.position.set(GATE[0] + 1.2, 0, GATE[1]); scene.add(g);
-  for (const s of [-1, 1]) { mesh(new THREE.BoxGeometry(0.45, 2.4, 0.45), '#5a5470', 0, 1.2, s * 1.15, g); mesh(new THREE.SphereGeometry(0.28, 7, 5), '#6a6484', 0, 2.55, s * 1.15, g); }
-  const arch = mesh(new THREE.TorusGeometry(1.15, 0.07, 5, 14, Math.PI), '#2a2140', 0, 2.2, 0, g); arch.rotation.y = Math.PI / 2;
-  for (let i = -3; i <= 3; i++) { if (Math.abs(i) < 1) continue; mesh(new THREE.BoxGeometry(0.06, 1.4, 0.06), '#2a2140', 0, 0.8, i * 0.32, g); }
-  // fence along the back
-  for (let x = -16; x < 13; x += 0.9) { if (Math.abs(x - GATE[0]) < 2) continue; mesh(new THREE.BoxGeometry(0.12, 0.9 + (Math.round(x * 10) % 3) * 0.08, 0.12), '#3a3150', x, 0.45, -8.2); }
-  mesh(new THREE.BoxGeometry(29, 0.08, 0.08), '#3a3150', -1.5, 0.75, -8.2);
-}
-// a rising sun behind the gate, very far away: it brightens as the night goes on
-const horizon = glow('rgba(255,150,90,.8)', 14, scene, -22, 1, -14, 0.0);
-
-// the clinic (where the Dawn wants to go): a wall with the window at the end of the path
-const WIN = MAP.path[MAP.path.length - 1];
-const clinic = new THREE.Group(); scene.add(clinic);
-const curtains = [], candles = [];
-{ const x0 = WIN[0] + 0.35;
-  mesh(new THREE.BoxGeometry(5, 5.4, 15), '#4a3d68', x0 + 2.5, 2.7, -0.5, clinic);
-  mesh(new THREE.BoxGeometry(5.6, 0.5, 15.6), '#2a2140', x0 + 2.5, 5.6, -0.5, clinic);
-  for (let i = 0; i < 6; i++) { const r = mesh(new THREE.ConeGeometry(1.4, 1.6, 4), '#3a2d54', x0 + 2.5, 6.6, -6.5 + i * 2.4, clinic); r.rotation.y = Math.PI / 4; }
-  // the window: warm inside, two curtains, candles on the sill
-  mesh(new THREE.BoxGeometry(0.1, 2.2, 3.0), M('#ffcf7a', { emissive: '#ff9f3a', emissiveIntensity: 0.55 }), x0 - 0.02, 1.9, WIN[1], clinic);
-  mesh(new THREE.BoxGeometry(0.2, 0.18, 3.4), '#2a2140', x0 - 0.08, 3.05, WIN[1], clinic);
-  mesh(new THREE.BoxGeometry(0.6, 0.14, 3.4), '#5a4a3a', x0 - 0.25, 0.8, WIN[1], clinic);
-  for (const s of [-1, 1]) { const c = mesh(new THREE.BoxGeometry(0.06, 2.1, 1.5), M('#7a2a5a', { roughness: 1 }), x0 - 0.1, 1.95, WIN[1] + s * 0.75, clinic); c.userData.s = s; curtains.push(c); }
-  const wl = new THREE.PointLight('#ffb35a', 1.1, 9, 1.8); wl.position.set(x0 - 1.2, 1.8, WIN[1]); clinic.add(wl);
-  glow('rgba(255,190,110,.8)', 4.5, clinic, x0 - 0.3, 1.9, WIN[1], 0.4);
-  for (let i = 0; i < D.RULES.lives; i++) {
-    const row = i % 2, k = Math.floor(i / 2);
-    const g = new THREE.Group(); g.position.set(x0 - 0.15 - row * 0.28, 0.87, WIN[1] - 1.45 + k * 0.32); clinic.add(g);
-    mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.24, 6), '#f3ecdf', 0, 0.12, 0, g);
-    const f = mesh(new THREE.ConeGeometry(0.045, 0.12, 5), new THREE.MeshBasicMaterial({ color: '#ffd166' }), 0, 0.31, 0, g); f.castShadow = false;
-    const gl = glow('rgba(255,200,100,.9)', 0.45, g, 0, 0.32, 0, 0.7);
-    candles.push({ g, f, gl, out: false });
-  }
-  // the door, a lamp and a sign
-  mesh(new THREE.BoxGeometry(0.12, 2.4, 1.3), '#6a3a3a', x0 - 0.04, 1.2, 3.6, clinic);
-  mesh(new THREE.SphereGeometry(0.06, 5, 4), '#ffd166', x0 - 0.12, 1.2, 3.15, clinic);
-  const sign = mesh(new THREE.BoxGeometry(0.1, 0.8, 2.4), '#2f7a64', x0 - 0.08, 3.7, 3.6, clinic);
-  { const c = document.createElement('canvas'); c.width = 256; c.height = 86; const g = c.getContext('2d'); g.fillStyle = '#2f7a64'; g.fillRect(0, 0, 256, 86); g.fillStyle = '#f3ecdf'; g.font = '600 34px Fredoka, sans-serif'; g.textAlign = 'center'; g.fillText('NIGHT CLINIC', 128, 56);
-    const p = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.77), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) })); p.position.set(x0 - 0.14, 3.7, 3.6); p.rotation.y = -Math.PI / 2; clinic.add(p); setTimeout(() => { g.fillStyle = '#2f7a64'; g.fillRect(0, 0, 256, 86); g.fillStyle = '#f3ecdf'; g.fillText('NIGHT CLINIC', 128, 56); p.material.map.needsUpdate = true; }, 800); }
-}
-
-// decorations: pumpkins, gravestones, little trees, lanterns. Kept away from the path and the stones.
+// colours and props per map
+const THEME = {
+  garden: { ground: '#24302c', patches: ['#283830', '#202a28'], tufts: ['#3d5a44', '#4a6a4a'], path: '#6b5644', edge: '#4a3c34', step: '#8a7866', call: [0.8, 3.4] },
+  patch:  { ground: '#29281c', patches: ['#33301f', '#24221a'], tufts: ['#4a5a2a', '#5a6a32'], path: '#7a6248', edge: '#4a3c2c', step: '#9a8466', call: [1.4, 2.4] },
+  roof:   { ground: '#3a3352', patches: [], tufts: null, path: '#7a5a3a', edge: '#4a3424', step: null, planks: '#8a6a44', call: [0.8, 3.4] },   // call: where the Start wave button sits, from the gate
+};
 function free(x, z, r) { return PATH.dist(x, z) > r + 0.9 && MAP.slots.every(s => Math.hypot(s[0] - x, s[1] - z) > r + 1); }
-function pumpkin(x, z, s) { const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); scene.add(g);
+function pumpkin(x, z, s, lit) { const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); scene.add(g);
   for (let i = 0; i < 7; i++) { const a = i * TAU / 7; mesh(new THREE.SphereGeometry(0.3, 7, 5), '#e8752a', Math.cos(a) * 0.22, 0.3, Math.sin(a) * 0.22, g).scale.set(0.7, 1, 0.7); }
-  mesh(new THREE.CylinderGeometry(0.04, 0.06, 0.2, 5), '#5a6b2a', 0, 0.62, 0, g); return g; }
+  mesh(new THREE.CylinderGeometry(0.04, 0.06, 0.2, 5), '#5a6b2a', 0, 0.62, 0, g);
+  if (lit) { for (const s2 of [-1, 1]) mesh(new THREE.ConeGeometry(0.07, 0.1, 3), M('#ffd166', { emissive: '#ffb03a', emissiveIntensity: 1 }), s2 * 0.12, 0.38, 0.4, g).rotation.x = Math.PI / 2; glow('rgba(255,170,60,.7)', 1.4, g, 0, 0.35, 0.3, 0.5); }
+  return g; }
 function grave(x, z, r) { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = r; scene.add(g);
   mesh(new THREE.BoxGeometry(0.7, 0.85, 0.18), '#6a6484', 0, 0.42, 0, g); mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.18, 10, 1, false, 0, Math.PI), '#6a6484', 0, 0.85, 0, g).rotation.set(Math.PI / 2, 0, Math.PI / 2);
   mesh(new THREE.BoxGeometry(0.4, 0.05, 0.05), '#4a4464', 0, 0.62, 0.1, g); return g; }
@@ -125,25 +74,156 @@ function tree(x, z, s) { const g = new THREE.Group(); g.position.set(x, 0, z); g
 function lantern(x, z) { const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
   mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.6, 5), '#2a2140', 0, 0.8, 0, g); mesh(new THREE.BoxGeometry(0.3, 0.36, 0.3), M('#ffd166', { emissive: '#ffb03a', emissiveIntensity: 1 }), 0, 1.75, 0, g);
   glow('rgba(255,190,90,.8)', 1.8, g, 0, 1.75, 0, 0.6); }
-for (const [x, z, s] of [[-13, 1.5, 1.2], [-4.4, -5.6, 1], [7.7, 6.6, 1.3], [12.2, 4.6, 0.9], [-1.5, 6.8, 0.8], [2.2, -6.8, 1.1], [-13.6, -7.1, 0.9], [12.3, -6.5, 1]]) if (free(x, z, 0.4)) pumpkin(x, z, s);
-for (const [x, z, r] of [[-8.6, 6.8, 0.2], [-7.3, 7.1, -0.3], [-13.2, 6.2, 0.1], [7.6, -6.3, 0.3], [-4.6, -7.0, -0.2], [1.9, 2.9, 0.4]]) if (free(x, z, 0.4)) grave(x, z, r);
-for (const [x, z, s] of [[-15.5, 4.5, 1.4], [-3.5, -7.6, 1.2], [8.5, -7.3, 1.3], [0.4, 7.5, 1.1], [-15.6, -7.3, 1.2]]) tree(x, z, s);
-for (const [x, z] of [[-6.6, -4.2], [3.5, 5.1], [11.3, 3.2], [-0.6, -3.3]]) if (free(x, z, 0.2)) lantern(x, z);
+// the Pumpkin Patch: a scarecrow in a nightcap, hay bales, curly vines
+function scarecrow(x, z, r) { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = r; scene.add(g);
+  mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.2, 5), '#5a4030', 0, 1.1, 0, g);
+  const arms = mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 5), '#5a4030', 0, 1.6, 0, g); arms.rotation.z = Math.PI / 2;
+  mesh(new THREE.BoxGeometry(0.6, 0.7, 0.3), '#6a4a7a', 0, 1.45, 0, g);
+  mesh(new THREE.SphereGeometry(0.26, 8, 6), '#d8b46a', 0, 2.1, 0, g);
+  const cap = mesh(new THREE.ConeGeometry(0.24, 0.6, 7), '#3f6aa0', 0.08, 2.45, 0, g); cap.rotation.z = -0.5;
+  mesh(new THREE.SphereGeometry(0.07, 5, 4), '#f3ecdf', 0.32, 2.6, 0, g);
+  for (const s of [-1, 1]) mesh(new THREE.ConeGeometry(0.1, 0.3, 4), '#d8b46a', s * 0.85, 1.5, 0, g).rotation.z = s * Math.PI / 2; }
+function hay(x, z, r) { const m = mesh(new THREE.BoxGeometry(1.1, 0.55, 0.7), '#c9a24a', x, 0.28, z); m.rotation.y = r; for (const s of [-0.25, 0.25]) { const b = mesh(new THREE.BoxGeometry(0.05, 0.57, 0.72), '#8a6a2a', s, 0, 0); m.add(b); } }
+function vine(x, z, r) { const g = new THREE.Group(); g.position.set(x, 0.06, z); g.rotation.y = r; scene.add(g);
+  for (let i = 0; i < 5; i++) { const t = mesh(new THREE.TorusGeometry(0.22, 0.03, 3, 8, Math.PI), '#4a6a2a', i * 0.38, 0, 0, g); t.rotation.x = -Math.PI / 2; t.rotation.z = i % 2 ? Math.PI : 0; t.castShadow = false; }
+  mesh(new THREE.SphereGeometry(0.12, 5, 4), '#5a7a32', 0.6, 0.06, 0.2, g).scale.set(1.4, 0.4, 1); }
+// the Rooftop: chimneys, an aerial, a weathervane, a skylight
+function chimney(x, z, h) { const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
+  mesh(new THREE.BoxGeometry(0.9, h, 0.9), '#7a4a4a', 0, h / 2, 0, g); mesh(new THREE.BoxGeometry(1.1, 0.18, 1.1), '#5a3a3a', 0, h, 0, g);
+  for (const s of [-0.2, 0.2]) mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.4, 7), '#9a6a5a', s, h + 0.28, 0, g);
+  for (let i = 0; i < 3; i++) glow('rgba(200,190,230,.35)', 0.9 + i * 0.4, g, 0.1 * i, h + 0.8 + i * 0.6, -0.1 * i, 0.3 - i * 0.07); }
+function aerial(x, z) { const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
+  mesh(new THREE.CylinderGeometry(0.04, 0.05, 2.6, 5), '#8a84a4', 0, 1.3, 0, g);
+  for (let i = 0; i < 4; i++) { const b = mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.2 - i * 0.2, 4), '#8a84a4', 0, 1.8 + i * 0.22, 0, g); b.rotation.x = Math.PI / 2; } }
+function vane(x, z) { const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
+  mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.8, 5), '#2a2140', 0, 0.9, 0, g);
+  const bird = new THREE.Group(); bird.position.y = 1.9; g.add(bird); bird.rotation.y = 0.7;
+  mesh(new THREE.ConeGeometry(0.16, 0.6, 4), '#c98a4a', 0, 0, 0, bird).rotation.z = Math.PI / 2; mesh(new THREE.BoxGeometry(0.05, 0.3, 0.25), '#c98a4a', -0.28, 0.1, 0, bird); }
+function skylight(x, z) { mesh(new THREE.BoxGeometry(1.5, 0.3, 1.1), '#2a2140', x, 0.15, z); mesh(new THREE.BoxGeometry(1.3, 0.05, 0.9), M('#ffcf7a', { emissive: '#ff9f3a', emissiveIntensity: 0.5 }), x, 0.31, z); glow('rgba(255,190,110,.6)', 2, scene, x, 0.6, z, 0.3); }
 
-// the Paper Pigeons' straight line over the garden: dotted, only while one is flying
-const airLine = new THREE.Group(); scene.add(airLine); airLine.visible = false;
-{ const A = MAP.path[0], B = MAP.path[MAP.path.length - 1], L = Math.hypot(B[0] - A[0], B[1] - A[1]); const dm = new THREE.MeshBasicMaterial({ color: '#c8c0ff', transparent: true, opacity: 0.45, depthWrite: false });
-  for (let s = 1.5; s < L - 0.5; s += 0.9) { const k = s / L; const d = new THREE.Mesh(new THREE.CircleGeometry(0.12, 8), dm); d.rotation.x = -Math.PI / 2; d.position.set(A[0] + (B[0] - A[0]) * k, 0.3, A[1] + (B[1] - A[1]) * k); airLine.add(d); } }
+function buildWorld(id) {
+  if (mapId === id) return;
+  // throw the old map away
+  for (const o of [...world.children]) { world.remove(o); o.traverse(q => { if (q.geometry && !q.isSprite) q.geometry.dispose(); }); }
+  mapId = id; MAP = D.MAPS[id]; PATH = D.makePath(MAP.path); GATE = MAP.path[0]; WIN = MAP.path[MAP.path.length - 1];
+  const TH = THEME[id]; seedG = 7;
+  const before = new Set(scene.children);
+  const ground = mesh(new THREE.PlaneGeometry(80, 50), M(TH.ground), 0, 0, 0); ground.rotation.x = -Math.PI / 2; ground.castShadow = false;
+  // darker patches, seeded so the map looks the same every time
+  if (TH.patches.length) for (let i = 0; i < 26; i++) { const p = mesh(new THREE.CircleGeometry(1 + rg() * 2.2, 9), M(rg() > 0.5 ? TH.patches[0] : TH.patches[1]), -17 + rg() * 32, 0.01, -8 + rg() * 16); p.rotation.x = -Math.PI / 2; p.castShadow = false; }
+  if (id === 'patch') for (let z = -7.6; z < 8; z += 1.1) { if (Math.abs(z) < 0.01) continue; const f = mesh(new THREE.BoxGeometry(34, 0.02, 0.32), M('#211f16'), -1.5, 0.012, z); f.castShadow = false; }   // furrows
+  if (id === 'roof') {   // roof tiles: rows of slightly lighter slates
+    for (let z = -8; z < 8.5; z += 0.7) { const r = mesh(new THREE.BoxGeometry(34, 0.05, 0.08), M('#2c2742'), -1.5, 0.02, z); r.castShadow = false; }
+    for (let i = 0; i < 40; i++) { const t = mesh(new THREE.BoxGeometry(0.62, 0.03, 0.6), M(rg() > 0.5 ? '#433b5c' : '#352f4c'), -16 + Math.floor(rg() * 46) * 0.66, 0.02, -8 + Math.floor(rg() * 23) * 0.7 + 0.35); t.castShadow = false; }
+  }
+  if (TH.tufts) { const tuft = new THREE.ConeGeometry(0.06, 0.32, 3); const spots = [];
+    for (let i = 0; i < 220; i++) { const x = -17 + rg() * 31, z = -8.5 + rg() * 17; if (PATH.dist(x, z) < 1.1) continue; if (MAP.slots.some(s => Math.hypot(s[0] - x, s[1] - z) < 0.9)) continue; spots.push([x, z, (rg() - 0.5) * 0.5]); }
+    for (const col of TH.tufts) { const im = new THREE.InstancedMesh(tuft, M(col), spots.length); const o = new THREE.Object3D(); let n = 0;
+      spots.forEach((s, i) => { if ((i % 2 === 0) !== (col === TH.tufts[0])) return; o.position.set(s[0], 0.15, s[1]); o.rotation.set(0, 0, s[2]); o.updateMatrix(); im.setMatrixAt(n++, o.matrix); });
+      im.count = n; scene.add(im); } }
+  // the path: packed earth with stepping stones, or on the roof a plank walkway
+  const PW = 1.5;
+  for (const g of PATH.segs) {
+    const mx = (g.x0 + g.x1) / 2, mz = (g.z0 + g.z1) / 2, a = Math.atan2(g.x1 - g.x0, g.z1 - g.z0);
+    const seg = mesh(new THREE.BoxGeometry(PW, 0.06, g.len), M(TH.path), mx, 0.03, mz); seg.rotation.y = a; seg.castShadow = false;
+    const edge = mesh(new THREE.BoxGeometry(PW + 0.25, 0.04, g.len + 0.25), M(TH.edge), mx, 0.015, mz); edge.rotation.y = a; edge.castShadow = false;
+    if (TH.step) for (let s = 0.6; s < g.len; s += 1.1) { const k = s / g.len; const st = mesh(new THREE.CylinderGeometry(0.22 + rg() * 0.12, 0.26, 0.05, 6), M(TH.step), g.x0 + (g.x1 - g.x0) * k + (rg() - 0.5) * 0.7, 0.07, g.z0 + (g.z1 - g.z0) * k + (rg() - 0.5) * 0.7); st.castShadow = false; }
+    if (TH.planks) for (let s = 0.25; s < g.len; s += 0.5) { const k = s / g.len; const pl = mesh(new THREE.BoxGeometry(PW - 0.1, 0.03, 0.06), M(TH.edge), g.x0 + (g.x1 - g.x0) * k, 0.07, g.z0 + (g.z1 - g.z0) * k); pl.rotation.y = a; pl.castShadow = false; }
+  }
+  for (const [x, z] of MAP.path.slice(1, -1)) { const c = mesh(new THREE.CylinderGeometry(PW / 2, PW / 2, 0.06, 12), M(TH.path), x, 0.031, z); c.castShadow = false; const c2 = mesh(new THREE.CylinderGeometry(PW / 2 + 0.125, PW / 2 + 0.125, 0.04, 12), M(TH.edge), x, 0.016, z); c2.castShadow = false; }
 
-// ---------------------------------------------------------------- build stones
-const stones = MAP.slots.map(([x, z], i) => {
-  const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
-  const base = mesh(new THREE.CylinderGeometry(0.85, 0.95, 0.22, 10), '#6a6484', 0, 0.11, 0, g);
-  const rim = mesh(new THREE.TorusGeometry(0.85, 0.08, 4, 20), '#8a84a4', 0, 0.23, 0, g); rim.rotation.x = Math.PI / 2;
-  const plus = glow('rgba(159,231,208,.9)', 1.1, g, 0, 0.35, 0, 0.35);
-  return { g, base, rim, plus, i, tower: null };
-});
+  // where the Dawn comes in: the garden gate, or on the roof a hatch with a ladder
+  if (id !== 'roof') { const g = new THREE.Group(); g.position.set(GATE[0] + 1.2, 0, GATE[1]); scene.add(g);
+    for (const s of [-1, 1]) { mesh(new THREE.BoxGeometry(0.45, 2.4, 0.45), '#5a5470', 0, 1.2, s * 1.15, g); mesh(new THREE.SphereGeometry(0.28, 7, 5), '#6a6484', 0, 2.55, s * 1.15, g); }
+    const arch = mesh(new THREE.TorusGeometry(1.15, 0.07, 5, 14, Math.PI), '#2a2140', 0, 2.2, 0, g); arch.rotation.y = Math.PI / 2;
+    for (let i = -3; i <= 3; i++) { if (Math.abs(i) < 1) continue; mesh(new THREE.BoxGeometry(0.06, 1.4, 0.06), '#2a2140', 0, 0.8, i * 0.32, g); }
+    // fence along the back
+    for (let x = -16; x < 13; x += 0.9) { if (Math.abs(x - GATE[0]) < 2 && Math.abs(GATE[1] + 8.2) < 3) continue; mesh(new THREE.BoxGeometry(0.12, 0.9 + (Math.round(x * 10) % 3) * 0.08, 0.12), '#3a3150', x, 0.45, -8.2); }
+    mesh(new THREE.BoxGeometry(29, 0.08, 0.08), '#3a3150', -1.5, 0.75, -8.2);
+  } else { const g = new THREE.Group(); g.position.set(GATE[0] + 0.9, 0, GATE[1]); scene.add(g);
+    mesh(new THREE.BoxGeometry(1.6, 0.3, 1.6), '#2a2140', 0, 0.15, 0, g);
+    const lid = mesh(new THREE.BoxGeometry(0.1, 1.5, 1.5), '#6a4a3a', -0.8, 0.85, 0, g); lid.rotation.z = 0.25;
+    for (const s of [-0.4, 0.4]) mesh(new THREE.BoxGeometry(0.08, 1.4, 0.08), '#8a6a44', 0.2, 0.6, s, g);
+    for (let i = 0; i < 3; i++) mesh(new THREE.BoxGeometry(0.06, 0.06, 0.8), '#8a6a44', 0.2, 0.4 + i * 0.4, 0, g);
+    glow('rgba(255,200,120,.5)', 2, g, 0, 0.5, 0, 0.35);
+    // a low wall along the back edge of the roof
+    mesh(new THREE.BoxGeometry(30, 0.5, 0.4), '#4a3d68', -1.5, 0.25, -8.4); mesh(new THREE.BoxGeometry(30, 0.08, 0.6), '#2a2140', -1.5, 0.52, -8.4);
+  }
+
+  // the clinic (where the Dawn wants to go): a wall with the window at the end of the path
+  clinic = new THREE.Group(); scene.add(clinic); curtains = []; candles = [];
+  { const x0 = WIN[0] + 0.35;
+    mesh(new THREE.BoxGeometry(5, 5.4, 15), '#4a3d68', x0 + 2.5, 2.7, -0.5, clinic);
+    mesh(new THREE.BoxGeometry(5.6, 0.5, 15.6), '#2a2140', x0 + 2.5, 5.6, -0.5, clinic);
+    for (let i = 0; i < 6; i++) { const r = mesh(new THREE.ConeGeometry(1.4, 1.6, 4), '#3a2d54', x0 + 2.5, 6.6, -6.5 + i * 2.4, clinic); r.rotation.y = Math.PI / 4; }
+    // the window: warm inside, two curtains, candles on the sill
+    mesh(new THREE.BoxGeometry(0.1, 2.2, 3.0), M('#ffcf7a', { emissive: '#ff9f3a', emissiveIntensity: 0.55 }), x0 - 0.02, 1.9, WIN[1], clinic);
+    mesh(new THREE.BoxGeometry(0.2, 0.18, 3.4), '#2a2140', x0 - 0.08, 3.05, WIN[1], clinic);
+    mesh(new THREE.BoxGeometry(0.6, 0.14, 3.4), '#5a4a3a', x0 - 0.25, 0.8, WIN[1], clinic);
+    for (const s of [-1, 1]) { const c = mesh(new THREE.BoxGeometry(0.06, 2.1, 1.5), M('#7a2a5a', { roughness: 1 }), x0 - 0.1, 1.95, WIN[1] + s * 0.75, clinic); c.userData.s = s; curtains.push(c); }
+    const wl = new THREE.PointLight('#ffb35a', 1.1, 9, 1.8); wl.position.set(x0 - 1.2, 1.8, WIN[1]); clinic.add(wl);
+    glow('rgba(255,190,110,.8)', 4.5, clinic, x0 - 0.3, 1.9, WIN[1], 0.4);
+    for (let i = 0; i < D.RULES.lives; i++) {
+      const row = i % 2, k = Math.floor(i / 2);
+      const g = new THREE.Group(); g.position.set(x0 - 0.15 - row * 0.28, 0.87, WIN[1] - 1.45 + k * 0.32); clinic.add(g);
+      mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.24, 6), '#f3ecdf', 0, 0.12, 0, g);
+      const f = mesh(new THREE.ConeGeometry(0.045, 0.12, 5), new THREE.MeshBasicMaterial({ color: '#ffd166' }), 0, 0.31, 0, g); f.castShadow = false;
+      const gl = glow('rgba(255,200,100,.9)', 0.45, g, 0, 0.32, 0, 0.7);
+      candles.push({ g, f, gl, out: false });
+    }
+    // the door, a lamp and a sign
+    mesh(new THREE.BoxGeometry(0.12, 2.4, 1.3), '#6a3a3a', x0 - 0.04, 1.2, 3.6, clinic);
+    mesh(new THREE.SphereGeometry(0.06, 5, 4), '#ffd166', x0 - 0.12, 1.2, 3.15, clinic);
+    mesh(new THREE.BoxGeometry(0.1, 0.8, 2.4), '#2f7a64', x0 - 0.08, 3.7, 3.6, clinic);
+    { const c = document.createElement('canvas'); c.width = 256; c.height = 86; const g = c.getContext('2d');
+      const paint = () => { g.fillStyle = '#2f7a64'; g.fillRect(0, 0, 256, 86); g.fillStyle = '#f3ecdf'; g.font = '600 34px Fredoka, sans-serif'; g.textAlign = 'center'; g.fillText('NIGHT CLINIC', 128, 56); };
+      paint(); const p = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.77), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) })); p.position.set(x0 - 0.14, 3.7, 3.6); p.rotation.y = -Math.PI / 2; clinic.add(p);
+      setTimeout(() => { paint(); p.material.map.needsUpdate = true; }, 800); }
+  }
+
+  // decorations, kept away from the path and the stones
+  if (id === 'garden') {
+    for (const [x, z, s] of [[-13, 1.5, 1.2], [-4.4, -5.6, 1], [7.7, 6.6, 1.3], [12.2, 4.6, 0.9], [-1.5, 6.8, 0.8], [2.2, -6.8, 1.1], [-13.6, -7.1, 0.9], [12.3, -6.5, 1]]) if (free(x, z, 0.4)) pumpkin(x, z, s);
+    for (const [x, z, r] of [[-8.6, 6.8, 0.2], [-7.3, 7.1, -0.3], [-13.2, 6.2, 0.1], [7.6, -6.3, 0.3], [-4.6, -7.0, -0.2], [1.9, 2.9, 0.4]]) if (free(x, z, 0.4)) grave(x, z, r);
+    for (const [x, z, s] of [[-15.5, 4.5, 1.4], [-3.5, -7.6, 1.2], [8.5, -7.3, 1.3], [0.4, 7.5, 1.1], [-15.6, -7.3, 1.2]]) tree(x, z, s);
+    for (const [x, z] of [[-6.6, -4.2], [3.5, 5.1], [11.3, 3.2], [-0.6, -3.3]]) if (free(x, z, 0.2)) lantern(x, z);
+  } else if (id === 'patch') {
+    // pumpkins everywhere, a few of them carved and lit
+    for (let i = 0; i < 90; i++) { const x = -16 + rg() * 28, z = -7.8 + rg() * 15.6, s = 0.55 + rg() * 0.6; if (free(x, z, 0.35 * s)) pumpkin(x, z, s, rg() < 0.12); }
+    for (let i = 0; i < 26; i++) { const x = -16 + rg() * 28, z = -7.8 + rg() * 15.6; if (free(x, z, 0.5)) vine(x, z, rg() * TAU); }
+    for (const [x, z, r] of [[-13, 6.4, 0.3], [0.4, -7.4, -0.2]]) if (free(x, z, 0.6)) scarecrow(x, z, r);
+    for (const [x, z, r] of [[-14.6, -7.2, 0.2], [11.6, -6.6, -0.3], [11.4, 6.4, 0.5], [-0.2, 7.4, 0.1]]) if (free(x, z, 0.6)) hay(x, z, r);
+    for (const [x, z, s] of [[-15.8, 4.5, 1.3], [12.3, -7.5, 1.1]]) tree(x, z, s);
+    for (const [x, z] of [[-13, -2.8], [8.3, 1.6], [-7.4, 5.9], [8.5, -2.8]]) if (free(x, z, 0.2)) lantern(x, z);
+  } else if (id === 'roof') {
+    for (const [x, z, h] of [[-13.6, -6.6, 1.6], [2.2, -7.2, 2], [-1.4, 7.2, 1.4], [12, 4.6, 1.8], [-15.6, 6.4, 1.5]]) if (free(x, z, 0.6)) chimney(x, z, h);
+    for (const [x, z] of [[9.2, 6.4]]) if (free(x, z, 0.3)) aerial(x, z);
+    for (const [x, z] of [[-8, 6.6]]) if (free(x, z, 0.3)) vane(x, z);
+    for (const [x, z] of [[-13.4, -2.7], [3.5, 7.4]]) if (free(x, z, 0.8)) skylight(x, z);
+    for (const [x, z] of [[-8.1, -6.6], [-1.2, 0.2], [9.1, 2.6]]) if (free(x, z, 0.2)) lantern(x, z);
+  }
+
+  // the Paper Pigeons' straight line: dotted, only while one is coming or flying
+  airLine = new THREE.Group(); scene.add(airLine); airLine.visible = false;
+  { const A = MAP.path[0], B = MAP.path[MAP.path.length - 1], L = Math.hypot(B[0] - A[0], B[1] - A[1]); const dm = new THREE.MeshBasicMaterial({ color: '#c8c0ff', transparent: true, opacity: 0.45, depthWrite: false });
+    for (let s = 1.5; s < L - 0.5; s += 0.9) { const k = s / L; const d = new THREE.Mesh(new THREE.CircleGeometry(0.12, 8), dm); d.rotation.x = -Math.PI / 2; d.position.set(A[0] + (B[0] - A[0]) * k, 0.3, A[1] + (B[1] - A[1]) * k); airLine.add(d); } }
+
+  // build stones
+  stones = MAP.slots.map(([x, z], i) => {
+    const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
+    const base = mesh(new THREE.CylinderGeometry(0.85, 0.95, 0.22, 10), '#6a6484', 0, 0.11, 0, g);
+    const rim = mesh(new THREE.TorusGeometry(0.85, 0.08, 4, 20), '#8a84a4', 0, 0.23, 0, g); rim.rotation.x = Math.PI / 2;
+    const plus = glow('rgba(159,231,208,.9)', 1.1, g, 0, 0.35, 0, 0.35);
+    return { g, base, rim, plus, i, tower: null };
+  });
+  // everything just added to the scene belongs to this map
+  for (const o of [...scene.children]) if (!before.has(o)) world.add(o);
+  if (window.__game) window.__game.stones = stones;
+}
+// a rising sun behind the gate, very far away: it brightens as the night goes on
+const horizon = glow('rgba(255,150,90,.8)', 14, scene, -22, 1, -14, 0.0);
 const RIM = ['#8a84a4', '#c98a4a', '#cfd6e6', '#ffd166'];
+buildWorld(game.endless ? D.ENDLESS.map : game.map);
 
 // range ring (shown while choosing or looking at a tower)
 const rangeRing = new THREE.Mesh(new THREE.RingGeometry(0.97, 1, 64), new THREE.MeshBasicMaterial({ color: '#9fe7d0', transparent: true, opacity: 0.8, depthWrite: false }));
@@ -527,15 +607,16 @@ function pop(text, x, y, z, cls) { const p = toScreen(x, y, z); const el = docum
 let toastTimer = 0;
 function toast(t, s, dur) { $('toastT').textContent = t; $('toastS').textContent = s || ''; $('toast').classList.add('on'); toastTimer = dur || 2.6; }
 let lastHud = '';
+const callScreen = () => { const o = THEME[mapId].call; return toScreen(GATE[0] + o[0], 0, GATE[1] + o[1]); };
 function updateHud() {
   const k = S.candy + '|' + S.lives + '|' + S.wave;
-  if (k !== lastHud) { lastHud = k; ui.candy.textContent = S.candy; ui.lives.textContent = S.lives; ui.wave.textContent = Math.min(S.wave, S.waves) + '/' + S.waves; refreshRing(); }
+  if (k !== lastHud) { lastHud = k; ui.candy.textContent = S.candy; ui.lives.textContent = S.lives; ui.wave.textContent = S.endless ? 'Wave ' + Math.max(1, S.wave) : Math.min(S.wave, S.waves) + '/' + S.waves; refreshRing(); }
   // the call button sits by the garden gate
   const can = sim.canCallEarly() && !over;
   ui.call.hidden = !can || !started;
   if (can) {
-    const p = toScreen(GATE[0] + 0.8, 0, GATE[1] + 3.4); ui.call.style.left = Math.max(56, p.x) + 'px'; ui.call.style.top = Math.max(120, p.y) + 'px';
-    const next = sim.map.waves[S.wave];
+    const p = callScreen(); ui.call.style.left = Math.max(56, p.x) + 'px'; ui.call.style.top = Math.max(120, p.y) + 'px';
+    const next = sim.waveDef(S.wave);
     const kinds = [...new Set(next.map(g => g[0]))];
     ui.callWho.textContent = kinds.map(k => ENEMY_ICON[k]).join('');
     if (S.phase === 'ready') { ui.callText.textContent = 'Start wave 1'; ui.callArc.style.strokeDashoffset = 0; }
@@ -627,7 +708,7 @@ renderer.domElement.addEventListener('pointerdown', ev => {
   if (s == null || s === selSlot) { closeRing(); return; }
   openRing(s);
 });
-ui.call.addEventListener('pointerdown', ev => { ev.stopPropagation(); if (sim.canCallEarly()) { const b = sim.earlyBonus(); sim.startWave(); if (b > 0) { const p = toScreen(GATE[0] + 0.8, 0, GATE[1] + 3.4); const el = document.createElement('div'); el.className = 'pop'; el.textContent = '+' + b + ' 🍬 early!'; el.style.left = Math.max(48, p.x) + 'px'; el.style.top = Math.max(110, p.y) - 50 + 'px'; fx.appendChild(el); setTimeout(() => el.remove(), 1200); } } });
+ui.call.addEventListener('pointerdown', ev => { ev.stopPropagation(); if (sim.canCallEarly()) { const b = sim.earlyBonus(); sim.startWave(); if (b > 0) { const p = callScreen(); const el = document.createElement('div'); el.className = 'pop'; el.textContent = '+' + b + ' 🍬 early!'; el.style.left = Math.max(48, p.x) + 'px'; el.style.top = Math.max(110, p.y) - 50 + 'px'; fx.appendChild(el); setTimeout(() => el.remove(), 1200); } } });
 let speed = 1;
 ui.speed.addEventListener('click', () => { speed = speed === 1 ? 2 : 1; ui.speed.textContent = speed + '×'; ui.speed.classList.toggle('on', speed === 2); });
 let userPaused = false, tabHidden = false;
@@ -648,7 +729,7 @@ function handle(e) {
       for (let k = 0, n = 0; k < candles.length && n < e.lives; k++) if (!candles[k].out) { candles[k].out = true; n++; sparkle(clinic.position.x + candles[k].g.position.x, 1.2, candles[k].g.position.z, 'rgba(200,200,220,.5)', 4); }
       ui.livesPill.classList.remove('hurt'); void ui.livesPill.offsetWidth; ui.livesPill.classList.add('hurt');
       pop('−' + e.lives + ' 🕯️', WIN[0] - 0.6, 2.6, WIN[1], 'bad'); break; }
-    case 'wave': { closeRingIfStale(); const boss = e.boss; toast(boss ? 'Final wave!' : 'Wave ' + e.wave, boss ? 'Here comes the Sun…' : '', 1.6); break; }
+    case 'wave': { closeRingIfStale(); const boss = e.boss; toast(boss ? (S.endless ? 'Wave ' + e.wave + ': the Sun!' : 'Final wave!') : 'Wave ' + e.wave, boss ? 'Here comes the Sun…' : '', 1.6); break; }
     case 'throw': case 'bats': case 'lob': case 'breath': case 'zap': { const T = stones[e.tower].tower; if (T) T.a = 1;
       if (e.type === 'breath') breath(e.tower, e.r); if (e.type === 'zap') zap(e.tower, e.pts); break; }
     case 'burst': seeds(e.x, e.z, e.r); break;
@@ -658,6 +739,7 @@ function handle(e) {
     case 'sell': removeTower(e.slot); pop('+' + e.candy + '🍬', stones[e.slot].g.position.x, 1.5, stones[e.slot].g.position.z); break;
     case 'won': setTimeout(() => endCard(true, e.stars), 1400); over = true; closeRing(); break;
     case 'lost': setTimeout(() => endCard(false, 0), 1000); over = true; closeRing(); break;
+    case 'cleared': if (S.endless && e.wave > (save.endless || 0) && save.endless > 0 && !S.newBest) { S.newBest = true; toast('New best!', 'Past wave ' + save.endless + '. Keep going!', 2); } break;
   }
 }
 function closeRingIfStale() { if (selSlot != null) refreshRing(); }
@@ -671,7 +753,7 @@ function updateEnemies(dt, t) {
     const V = views.get(e.id); if (!V) continue;
     V.root.position.x += (e.x - V.root.position.x) * Math.min(1, dt * 18); V.root.position.z += (e.z - V.root.position.z) * Math.min(1, dt * 18);
     if (e.dx != null) { const a = Math.atan2(e.dx, e.dz); let d = a - V.g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); V.g.rotation.y += d * Math.min(1, dt * 8); }
-    const k = e.hp / e.max, prog = e.s / PATH.L;
+    const k = e.hp / e.max, prog = e.prog || 0;
     const sp = EN[e.type].burst ? (((S.t + e.phase * 3) % (EN[e.type].burst[1] + EN[e.type].burst[3])) < EN[e.type].burst[1] ? 1 : 3) : 1;
     V.tick(t, dt, sp, k, prog);
     V.bar.visible = k < 0.999; V.bar.quaternion.copy(camQ); V.fg.scale.x = Math.max(0.001, k); V.fg.material.color.set(k > 0.5 ? '#7fe08a' : k > 0.25 ? '#ffd166' : '#ff7a5a');
@@ -723,13 +805,26 @@ function updateWorld(dt, t) {
   for (const c of curtains) { const w = Math.max(0.25, 1 - open * 0.75); c.scale.z += (w - c.scale.z) * Math.min(1, dt * 3); c.position.z = WIN[1] + c.userData.s * (1.5 - 0.75 * c.scale.z); }
   // dawn creeps in: the sky warms with the waves, and a lot when the Sun is out
   const sun = S.enemies.find(e => e.boss);
-  const dawn = Math.min(1, S.wave / S.waves * 0.45 + (sun ? 0.3 + 0.4 * sun.s / PATH.L : 0) + (S.phase === 'won' ? -0.4 : 0));
+  const dawn = Math.min(1, (S.endless ? ((S.wave - 1) % D.ENDLESS.bossEvery) / D.ENDLESS.bossEvery : S.wave / S.waves) * 0.45 + (sun ? 0.3 + 0.4 * sun.s / PATH.L : 0) + (S.phase === 'won' ? -0.4 : 0));
   scene.background.copy(NIGHT_BG).lerp(DAWN_BG, Math.max(0, dawn)); scene.fog.color.copy(scene.background);
   horizon.material.opacity = Math.max(0, dawn) * 0.8; horizon.scale.setScalar(10 + dawn * 10);
   hemi.intensity = 0.85 + dawn * 0.25;
-  airLine.visible = S.enemies.some(e => e.straight) || (S.next > 0 && (sim.map.waves[S.wave] || []).some(g => g[0] === 'pigeon'));
+  airLine.visible = S.enemies.some(e => e.straight) || ((S.next > 0 || S.phase === 'ready') && (sim.waveDef(S.wave) || []).some(g => g[0] === 'pigeon'));
   dawnL.intensity = sun ? 1.2 : 0; if (sun) { const V = views.get(sun.id); if (V) dawnL.position.set(V.root.position.x, 3.5, V.root.position.z); }
 }
+
+// ---------------------------------------------------------------- saves (this device for now; Playgama cloud saves come in step 3)
+const SAVE_KEY = 'nsd-save-1';
+let save = { stars: {}, endless: 0 };
+try { const v = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (v && typeof v === 'object') save = { stars: Object.assign({}, v.stars), endless: +v.endless || 0 }; } catch (e) {}
+function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+// a map opens when the one before it is won (any stars); Endless opens with the Garden Path won
+function unlocked(id) { const i = D.MAP_ORDER.indexOf(id); return i <= 0 || (save.stars[D.MAP_ORDER[i - 1]] || 0) > 0; }
+const endlessOpen = () => (save.stars[D.ENDLESS.map] || 0) > 0;
+const totalStars = () => D.MAP_ORDER.reduce((a, id) => a + (save.stars[id] || 0), 0);
+// the monster each map adds, for the map card and the intro
+const NEW_TOWER = {}; for (const [t, name] of Object.entries(D.UNLOCK)) for (const id of D.MAP_ORDER) if (D.MAPS[id].name === name) NEW_TOWER[id] = t;
+const MAP_ICON = { garden: '🌿', patch: '🎃', roof: '🏠' };
 
 // ---------------------------------------------------------------- start, end, restart
 let started = false, over = false;
@@ -740,20 +835,66 @@ function clearViews() {
   for (let i = 0; i < stones.length; i++) if (stones[i].tower) { scene.remove(stones[i].tower.root); stones[i].tower = null; stones[i].plus.visible = true; stones[i].rim.material = M(RIM[0]); }
   for (const c of candles) { c.out = false; }
 }
-function restart() {
-  clearViews(); closeRing();
-  sim = D.create({ seed: (Date.now() % 100000) + 1 }); S = sim.state; window.__game.sim = sim;
-  over = false; started = true; lastHud = ''; $('endCard').hidden = true;
+function hideCards() { for (const id of ['mapCard', 'pauseCard', 'endCard']) $(id).hidden = true; }
+function play(id, endless) {
+  clearViews(); closeRing(); hideCards();
+  game = { map: endless ? D.ENDLESS.map : id, endless: !!endless };
+  buildWorld(game.map);
+  sim = D.create({ seed: newSeed(), map: game.map, endless: game.endless }); S = sim.state; window.__game.sim = sim;
+  over = false; started = true; userPaused = false; lastHud = '';
+  const nt = NEW_TOWER[game.map];
+  if (game.endless) toast('♾️ Endless', 'All five monsters are on shift. How many waves can you hold?' + (save.endless ? ' Best: ' + save.endless + '.' : ''), 4);
+  else if (nt) toast(MAP_ICON[game.map] + ' ' + D.MAPS[game.map].name, TOWER_ICON[nt] + ' ' + TW[nt].name + ' joins the night shift! ' + TOWER_TEXT[nt].line, 4.5);
+  else toast('Tap a stone', 'Place a monster beside the path, then start the wave.', 3.5);
+}
+function restart() { play(game.map, game.endless); }
+function showMaps() {
+  hideCards(); closeRing(); started = false;
+  const el = $('maps'); el.innerHTML = '';
+  const tile = (cls, html, on) => { const b = document.createElement('button'); b.className = 'tile ' + cls; b.innerHTML = html; if (on) b.addEventListener('click', on); else b.disabled = true; el.appendChild(b); };
+  const starsHtml = n => '<div class="st">' + [1, 2, 3].map(i => '<i class="' + (i <= n ? 'on' : '') + '">⭐</i>').join('') + '</div>';
+  D.MAP_ORDER.forEach((id, i) => {
+    const open = unlocked(id), st = save.stars[id] || 0, nt = NEW_TOWER[id];
+    const sub = !open ? '🔒 Win the ' + D.MAPS[D.MAP_ORDER[i - 1]].name : nt ? 'New: <b>' + TOWER_ICON[nt] + ' ' + TW[nt].name + '</b>' : D.MAPS[id].towers.map(t => TOWER_ICON[t]).join(' ');
+    tile((open ? '' : 'locked') + (open && !st ? ' fresh' : ''), '<div class="ic">' + MAP_ICON[id] + '</div><div class="nm">' + D.MAPS[id].name + '</div>' + starsHtml(st) + '<div class="sub">' + sub + '</div>', open ? () => play(id, false) : null);
+  });
+  const eo = endlessOpen();
+  tile('endless' + (eo ? '' : ' locked'), '<div class="ic">♾️</div><div class="nm">Endless</div><div class="sub">' + (eo ? (save.endless ? 'Best: wave <b>' + save.endless + '</b>' : 'Waves forever, all 5 monsters') : '🔒 Win the ' + D.MAPS[D.ENDLESS.map].name) + '</div>', eo ? () => play(null, true) : null);
+  $('starTotal').textContent = totalStars();
+  $('mapCard').hidden = false;
 }
 function endCard(won, stars) {
-  $('endT').textContent = won ? 'Night saved!' : 'Good morning…';
-  $('endStars').innerHTML = [1, 2, 3].map(i => '<i class="' + (i <= stars ? 'on' : '') + '">⭐</i>').join('');
-  $('endS').textContent = won ? (stars === 3 ? 'Not one candle out. The clinic sleeps in.' : S.lives + ' candles still burning. One more hour of night!') + ' Shooed: ' + S.stats.shooed + '.'
-    : 'The curtains are open and the whole clinic woke up. Reached wave ' + S.wave + ' of ' + S.waves + '.';
+  const nb = $('nextBtn'), nw = $('endNew'); nb.hidden = true; nw.hidden = true;
+  if (S.endless) {
+    const n = S.cleared, best = save.endless || 0, isBest = n > best;
+    if (isBest) { save.endless = n; persist(); }
+    $('endT').textContent = 'Good morning…';
+    $('endStars').innerHTML = '';
+    $('endS').textContent = 'You held the night for ' + n + ' wave' + (n === 1 ? '' : 's') + '. Shooed: ' + S.stats.shooed + '.';
+    nw.hidden = !n && !best; nw.textContent = isBest ? (best ? '🏆 New best! (was ' + best + ')' : '🏆 Your first Endless score!') : 'Best: ' + best + ' waves.';
+    $('againBtn').textContent = 'Try again'; $('againBtn').className = 'big';
+  } else {
+    const id = game.map, wasOpen = D.MAP_ORDER.map(unlocked), hadEndless = endlessOpen();
+    if (won && stars > (save.stars[id] || 0)) { save.stars[id] = stars; persist(); }
+    $('endT').textContent = won ? 'Night saved!' : 'Good morning…';
+    $('endStars').innerHTML = [1, 2, 3].map(i => '<i class="' + (i <= stars ? 'on' : '') + '">⭐</i>').join('');
+    $('endS').textContent = won ? (stars === 3 ? 'Not one candle out. The clinic sleeps in.' : S.lives + ' candles still burning. One more hour of night!') + ' Shooed: ' + S.stats.shooed + '.'
+      : 'The curtains are open and the whole clinic woke up. Reached wave ' + S.wave + ' of ' + S.waves + '.';
+    const next = D.MAP_ORDER[D.MAP_ORDER.indexOf(id) + 1];
+    const news = [];
+    if (next && unlocked(next) && !wasOpen[D.MAP_ORDER.indexOf(next)]) { const nt = NEW_TOWER[next]; news.push('🔓 ' + D.MAPS[next].name + ' is open' + (nt ? ': ' + TOWER_ICON[nt] + ' ' + TW[nt].name + ' is waiting there!' : '!')); }
+    if (endlessOpen() && !hadEndless) news.push('♾️ Endless is open too.');
+    if (news.length) { nw.hidden = false; nw.innerHTML = news.join('<br>'); }
+    if (won && next && unlocked(next)) { nb.hidden = false; nb.textContent = 'Next: ' + D.MAPS[next].name; nb.onclick = () => play(next, false); }
+    $('againBtn').textContent = won ? 'Play again' : 'Try again';
+    $('againBtn').className = 'big' + (nb.hidden ? '' : ' alt');
+  }
   $('endCard').hidden = false; toastTimer = 0.01;
 }
-$('playBtn').addEventListener('click', () => { $('startCard').hidden = true; started = true; toast('Tap a stone', 'Place a monster beside the path, then start the wave.', 3.5); });
 $('againBtn').addEventListener('click', restart);
+$('endMapsBtn').addEventListener('click', showMaps);
+$('pauseMapsBtn').addEventListener('click', () => { userPaused = false; showMaps(); });
+showMaps();
 
 // ---------------------------------------------------------------- loop
 let last = performance.now(), acc = 0, clock = 0;
@@ -779,5 +920,5 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // for automated tests only
-window.__game = { sim, D, toScreen, stones, get S() { return S; }, start() { $('startCard').hidden = true; started = true; }, setSpeed(s) { speed = s; } };
+window.__game = { sim, D, toScreen, stones, get S() { return S; }, get save() { return save; }, play, showMaps, start() { play(game.map, game.endless); }, setSpeed(s) { speed = s; } };
 })();

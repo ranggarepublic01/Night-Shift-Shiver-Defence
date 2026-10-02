@@ -82,6 +82,25 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; }
 .card .stars i.on { filter: none; }
 .big { margin-top: 10px; background: radial-gradient(circle at 40% 30%, #ffb36b, #e0602f); border: 3px solid #ffe3a6; border-radius: 999px; padding: 10px 30px; font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 20px; }
 .big.alt { background: #3a2f62; border-color: var(--edge); font-size: 17px; padding: 8px 22px; }
+/* map select */
+.card.wide { width: min(780px, 94vw); max-width: none; padding: 16px 20px; }
+.maps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 10px 0 4px; }
+.tile { background: #3a2f62; border: 3px solid var(--edge); border-radius: 16px; padding: 8px 6px 9px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 128px; transition: transform .12s; }
+.tile:not(.locked):hover, .tile:not(.locked):focus-visible { transform: translateY(-2px); border-color: var(--candy); }
+.tile .ic { font-size: 34px; line-height: 1.15; }
+.tile .nm { font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 17px; line-height: 1.1; }
+.tile .st { font-size: 18px; letter-spacing: 2px; }
+.tile .st i { font-style: normal; filter: grayscale(1) brightness(.45); } .tile .st i.on { filter: none; }
+.tile .sub { font-size: 13px; color: var(--dim); line-height: 1.2; }
+.tile .sub b { color: var(--mint); font-weight: 600; }
+.tile.endless { background: #2c2556; }
+.tile.locked { opacity: .55; cursor: default; }
+.tile.locked .ic { filter: grayscale(1); }
+.tile.fresh { border-color: var(--candy); box-shadow: 0 0 0 4px rgba(255,209,102,.18); animation: bob 1.4s ease-in-out infinite; }
+.card p.total { margin: 4px 0 0; font-family: 'Fredoka', sans-serif; font-weight: 600; color: var(--candy); }
+.card p.new { color: var(--mint); font-weight: 600; }
+.card .big + .big { margin-left: 6px; }
+@media (max-height: 420px) { .card p.intro { display: none; } .tile { min-height: 0; padding: 6px 4px 7px; } .tile .ic { font-size: 28px; } .maps { margin: 6px 0 2px; } .card .big { margin-top: 6px; padding: 7px 22px; font-size: 17px; } .card .big.alt { padding: 6px 16px; font-size: 15px; } .card .stars { font-size: 32px; margin: 0; } }
 #turn { position: fixed; inset: 0; background: var(--night); display: none; place-items: center; text-align: center; z-index: 10; padding: 20px; }
 #turn div { font-size: 54px; animation: tilt 1.6s ease-in-out infinite; }
 #turn p { font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 20px; }
@@ -104,22 +123,26 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; }
 <div id="info" hidden></div>
 <div id="toast"><div class="t" id="toastT"></div><div class="s" id="toastS"></div></div>
 
-<div class="cover" id="startCard"><div class="card">
+<div class="cover" id="mapCard"><div class="card wide">
   <h1>Night Shift <span>Shiver Defense</span></h1>
-  <p>The Dawn wants to open the clinic’s curtains. One more hour of night, please!</p>
-  <p>Tap a stone beside the path to place a monster. Tap a monster to upgrade it. Three monsters are on shift here; more join on later maps.</p>
-  <button class="big" id="playBtn">Play the Garden Path</button>
+  <p class="intro">The Dawn wants to open the clinic’s curtains. One more hour of night, please! Tap a stone beside the path to place a monster; more monsters join on later maps.</p>
+  <div class="maps" id="maps"></div>
+  <p class="total">⭐ <b id="starTotal">0</b> / 9</p>
 </div></div>
 <div class="cover" id="pauseCard" hidden><div class="card">
   <h1>Paused</h1>
   <button class="big" id="resumeBtn">Resume</button><br>
   <button class="big alt" id="restartBtn">Restart level</button>
+  <button class="big alt" id="pauseMapsBtn">Maps</button>
 </div></div>
 <div class="cover" id="endCard" hidden><div class="card">
   <h1 id="endT"></h1>
   <div class="stars" id="endStars"></div>
   <p id="endS"></p>
+  <p id="endNew" class="new" hidden></p>
+  <button class="big" id="nextBtn" hidden>Next map</button>
   <button class="big" id="againBtn">Play again</button>
+  <button class="big alt" id="endMapsBtn">Maps</button>
 </div></div>
 <div id="turn"><div>📱</div><p>Turn your phone sideways<br>to keep the night going</p></div>
 
