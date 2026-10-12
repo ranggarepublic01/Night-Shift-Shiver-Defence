@@ -3,7 +3,7 @@
 // and the sound (all made in code). Loaded before view.js.
 // ============================================================================
 // ---------------------------------------------------------------- the platform: Playgama Bridge v2, with a plain-page fallback
-// Order matters (Playgama's required steps): initialize first; read the language once; save through Bridge storage (never
+// Order matters (Playgama's required steps): initialize first and touch nothing else on the Bridge until it resolves; read the language once; save through Bridge storage (never
 // localStorage when Bridge is there); follow pause and audio events; send game_ready when the first playable frame is up.
 const PF = (() => {
   const B = () => window.bridge, KEY = 'nightShiftDefense.v1';
@@ -12,7 +12,7 @@ const PF = (() => {
   const note = s => { try { out.log.push(s); } catch (e) { } };
   out.boot = () => new Promise(res => {
     let done = false; const fin = () => { if (!done) { done = true; res(); } };
-    setTimeout(fin, 3500);   // a platform that never answers must not hold the game
+    setTimeout(fin, 10000);   // a platform that never answers must not hold the game (the title is already up meanwhile)
     try {
       if (!B() || typeof B().initialize !== 'function') return fin();
       B().initialize().then(() => {
@@ -35,8 +35,11 @@ const PF = (() => {
   // the moment it finishes; if initialize failed we still try (Bridge's mock platform takes any call safely).
   out.ready = () => {
     wantReady = true; if (readySent) return;
+    // Nothing on the Bridge may be touched before initialize() has resolved: Bridge 2.3 logs a console error for any
+    // early access, and Playgama's Sandbox health check counts those errors. Until then this is sent from the
+    // initialize callback above; if initialize failed it isn't sent at all.
+    if (!ok) return;
     const b = B(); if (!b || !b.platform || typeof b.platform.sendMessage !== 'function') return;
-    if (!ok && !out.initFailed()) return;   // still starting: sent from the initialize callback above
     readySent = true; note('msg:game_ready'); try { const r = b.platform.sendMessage('game_ready'); if (r && r.catch) r.catch(() => { }); } catch (e) { }
   };
   let failed = false; out.initFailed = () => failed;
@@ -84,8 +87,8 @@ const PF = (() => {
   // ---- leaderboards
   out.lbType = () => { try { return ok && B().leaderboards ? String(B().leaderboards.type || 'not_available') : 'not_available'; } catch (e) { return 'not_available'; } };
   out.setScore = (id, score) => { if (!ok || out.lbType() === 'not_available') return Promise.resolve(false); note('setScore:' + id); try { return Promise.resolve(B().leaderboards.setScore(id, score)).then(() => true).catch(() => false); } catch (e) { return Promise.resolve(false); } };
-  out.entries = id => { try { return Promise.resolve(B().leaderboards.getEntries(id)).catch(() => null); } catch (e) { return Promise.resolve(null); } };
-  out.nativePopup = id => { try { return Promise.resolve(B().leaderboards.showNativePopup(id)).catch(() => null); } catch (e) { return Promise.resolve(null); } };
+  out.entries = id => { if (!ok) return Promise.resolve(null); try { return Promise.resolve(B().leaderboards.getEntries(id)).catch(() => null); } catch (e) { return Promise.resolve(null); } };
+  out.nativePopup = id => { if (!ok) return Promise.resolve(null); try { return Promise.resolve(B().leaderboards.showNativePopup(id)).catch(() => null); } catch (e) { return Promise.resolve(null); } };
   return out;
 })();
 const LB_STARS = 'total_stars', LB_ENDLESS = 'endless_waves';   // create these two boards on Playgama after the upload
